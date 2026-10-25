@@ -1,0 +1,6 @@
+# Audit all gems listed in the Gemfile for known security problems by running bin/bundler-audit.
+# CVEs that are not relevant to the application can be enumerated on the ignore list below.
+
+ignore: []
+# To ignore a CVE that does not affect this app, list its ID here with a comment explaining why:
+#   - CVE-2026-12345  # only affects feature X, which we do not use

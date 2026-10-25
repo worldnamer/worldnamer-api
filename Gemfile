@@ -49,4 +49,10 @@ group :development, :test do
   # Testing: RSpec with FactoryBot for test data
   gem "rspec-rails"
   gem "factory_bot_rails"
+  gem "dotenv-rails", "~> 3.2" # loads .env.development.local (gitignored) for local-only keys
 end
+
+# Traces to Honeycomb over OpenTelemetry (see config/initializers/opentelemetry.rb)
+gem "opentelemetry-sdk", "~> 1.13"
+gem "opentelemetry-exporter-otlp", "~> 0.37.0"
+gem "opentelemetry-instrumentation-all", "~> 0.99.0"

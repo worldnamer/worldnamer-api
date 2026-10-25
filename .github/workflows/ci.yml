@@ -1,0 +1,73 @@
+name: CI
+
+# Mirrors bin/ci (config/ci.rb). Keep the two in step. The gem audit is its own job so that a newly published
+# vulnerability shows up as a separate red check without hiding whether the code and tests passed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes an older, still-running run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    # RSpec needs a database. Locally the app uses the Unix socket as the role "worldnamer"; in CI it connects over
+    # TCP to this throwaway container, through DATABASE_URL below.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/worldnamer_api_test
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Reads the Ruby version from .ruby-version and caches the installed gems between runs.
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Style (rubocop)
+        run: bin/rubocop
+
+      - name: Security (brakeman)
+        run: bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error
+
+      - name: Prepare database
+        run: bin/rails db:prepare
+
+      - name: Tests (rspec)
+        run: bundle exec rspec
+
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Security (bundler-audit)
+        run: bin/bundler-audit

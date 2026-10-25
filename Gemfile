@@ -56,3 +56,7 @@ end
 gem "opentelemetry-sdk", "~> 1.13"
 gem "opentelemetry-exporter-otlp", "~> 0.37.0"
 gem "opentelemetry-instrumentation-all", "~> 0.99.0"
+
+# Exception reporting to Sentry (see config/initializers/sentry.rb)
+gem "sentry-ruby", "~> 7.1"
+gem "sentry-rails", "~> 7.1"

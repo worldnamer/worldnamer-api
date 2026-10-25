@@ -85,9 +85,7 @@ test:
 # for a full overview on how database connection configuration can be specified.
 #
 production:
-  # One database: Solid Queue, Cache, and Cable tables live alongside the app tables
-  # (created by the db/migrate/*solid* migrations).
+  # Host, port, database name, user, password, and SSL mode all come from the DATABASE_URL
+  # environment variable (set by Terraform in worldnamer-infra); nothing is hard-coded here.
+  # Solid Queue, Cache, and Cable tables live in this same database (db/migrate/*solid*).
   <<: *default
-  database: worldnamer_api_production
-  username: worldnamer_api
-  password: <%= ENV["WORLDNAMER_API_DATABASE_PASSWORD"] %>

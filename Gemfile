@@ -60,3 +60,10 @@ gem "opentelemetry-instrumentation-all", "~> 0.99.0"
 # Exception reporting to Sentry (see config/initializers/sentry.rb)
 gem "sentry-ruby", "~> 7.1"
 gem "sentry-rails", "~> 7.1"
+
+# Login: Devise for bcrypt and Warden, devise-jwt for the access token (bcrypt and jwt arrive with them)
+gem "devise", "~> 5.0"
+gem "devise-jwt", "~> 0.13.0"
+
+# Throttles POST /api/v1/session (see config/initializers/rack_attack.rb)
+gem "rack-attack", "~> 6.8"

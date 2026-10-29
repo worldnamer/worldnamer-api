@@ -91,6 +91,62 @@ RSpec.describe "users:create", type: :task do
     end
   end
 
+  # Plan section 2 and 4: changing the password revokes every session of that user.
+  context "refresh tokens" do
+    it "deletes ALL of the user's refresh tokens (every family, used, active and expired) when the password is updated" do
+      existing = create(:user, username: "john", password: "the old password 123")
+      create_list(:refresh_token, 2, user: existing)
+      create(:refresh_token, :used, user: existing)
+      create(:refresh_token, :expired, user: existing)
+      feed("john", password, password)
+
+      run_task
+
+      expect(RefreshToken.where(user_id: existing.id)).to be_empty
+    end
+
+    it "leaves other users' refresh tokens alone" do
+      existing = create(:user, username: "john", password: "the old password 123")
+      create(:refresh_token, user: existing)
+      other = create(:refresh_token)
+      feed("john", password, password)
+
+      run_task
+
+      expect(RefreshToken.all).to contain_exactly(other)
+    end
+
+    it "keeps the user's tokens when the new password is rejected" do
+      existing = create(:user, username: "john", password: "the old password 123")
+      token = create(:refresh_token, user: existing)
+      feed("john", "short", "short")
+
+      run_task
+
+      expect(RefreshToken.exists?(token.id)).to be(true)
+    end
+
+    it "keeps the user's tokens when the two entries differ" do
+      existing = create(:user, username: "john", password: "the old password 123")
+      token = create(:refresh_token, user: existing)
+      feed("john", password, "#{password}-different")
+
+      run_task
+
+      expect(RefreshToken.exists?(token.id)).to be(true)
+    end
+
+    it "changes no refresh tokens when it creates a new user" do
+      other = create(:refresh_token)
+      feed("john", password, password)
+
+      run_task
+
+      expect(User.find_by(username: "john")).to be_present
+      expect(RefreshToken.all).to contain_exactly(other)
+    end
+  end
+
   context "with bad passwords" do
     it "aborts when the two entries differ, creating nothing and printing neither" do
       feed("john", password, "#{password}-different")

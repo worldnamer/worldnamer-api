@@ -15,7 +15,7 @@ Rails.application.routes.draw do
       post "session/refresh", to: "sessions#refresh"
       delete "session", to: "sessions#destroy"
       get "me", to: "me#show"
-      resources :habits, only: %i[index]
+      resources :habits, only: %i[index create]
     end
   end
 

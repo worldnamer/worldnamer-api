@@ -1,0 +1,103 @@
+require "rails_helper"
+
+# Plan section 6, API scenarios 6, 8 and 15, plus the table's database-level guarantees.
+RSpec.describe Habit, type: :model do
+  let(:connection) { ActiveRecord::Base.connection }
+  let(:columns) { connection.columns(:habits).index_by(&:name) }
+
+  describe "table habits" do
+    it "has the planned columns" do
+      expect(columns.keys).to include("user_id", "name", "created_at", "updated_at")
+    end
+
+    it "requires user_id and name, and limits name to 100 characters" do
+      expect(columns["user_id"].null).to be(false)
+      expect(columns["name"].null).to be(false)
+      expect(columns["name"].limit).to eq(100)
+    end
+
+    it "indexes user_id" do
+      expect(connection.index_exists?(:habits, :user_id)).to be(true)
+    end
+
+    it "has a foreign key to users that cascades on delete" do
+      foreign_key = connection.foreign_keys(:habits).find { |fk| fk.to_table == "users" }
+      expect(foreign_key).to be_present
+      expect(foreign_key.column).to eq("user_id")
+      expect(foreign_key.on_delete).to eq(:cascade)
+    end
+  end
+
+  describe "validations" do
+    it "is valid with a user and a name" do
+      expect(build(:habit)).to be_valid
+    end
+
+    it "strips spaces at the start and end of the name" do
+      expect(build(:habit, name: "  Stretch \n").name).to eq("Stretch")
+    end
+
+    it "refuses an empty, whitespace-only or missing name" do
+      [ "", "   ", " 　", nil ].each do |name|
+        habit = build(:habit, name: name)
+        expect(habit).not_to be_valid
+        expect(habit.errors.full_messages).to eq([ "Name can't be blank" ])
+      end
+    end
+
+    it "accepts 100 characters and refuses 101" do
+      expect(build(:habit, name: "a" * 100)).to be_valid
+
+      habit = build(:habit, name: "a" * 101)
+      expect(habit).not_to be_valid
+      expect(habit.errors.full_messages).to eq([ "Name is too long (maximum is 100 characters)" ])
+    end
+
+    it "accepts 100 multibyte characters" do
+      expect(create(:habit, name: "é" * 100)).to be_persisted
+    end
+
+    it "allows the same name twice" do
+      user = create(:user)
+
+      expect { 2.times { create(:habit, user: user, name: "Stretch") } }.to change(Habit, :count).by(2)
+    end
+
+    it "needs a user" do
+      expect(build(:habit, user: nil)).not_to be_valid
+    end
+  end
+
+  describe "database guarantees" do
+    it "refuses a habit for a user that does not exist" do
+      expect {
+        Habit.insert!({ user_id: 0, name: "Stretch" })
+      }.to raise_error(ActiveRecord::InvalidForeignKey)
+    end
+
+    it "refuses a name over 100 characters, in the database" do
+      user = create(:user)
+
+      expect {
+        Habit.insert!({ user_id: user.id, name: "a" * 101 })
+      }.to raise_error(ActiveRecord::ValueTooLong)
+    end
+  end
+
+  describe "deleting a user" do
+    it "deletes their habits and no one else's" do
+      user = create(:user)
+      create_list(:habit, 2, user: user)
+      other = create(:habit)
+
+      expect { user.destroy! }.to change(Habit, :count).by(-2)
+      expect(Habit.all).to contain_exactly(other)
+    end
+
+    it "deletes their habits when the user row is deleted in SQL (cascade, not just callbacks)" do
+      habit = create(:habit)
+
+      expect { User.where(id: habit.user_id).delete_all }.to change(Habit, :count).by(-1)
+    end
+  end
+end

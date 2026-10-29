@@ -79,7 +79,7 @@ RSpec.describe "Refresh token leak checks on login, refresh and logout", type: :
     end
 
     it "holds no raw token on the failure paths either (reuse, unknown cookie)" do
-      login
+      login(password: sentinel_password)
       first = refresh_token_from
       refresh(first)
       travel 31.seconds

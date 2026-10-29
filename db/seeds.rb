@@ -11,3 +11,11 @@ unless User.find_by(username: "john")
   User.create!(username: "john", password: "correct horse battery")
   puts "Seeded user john"
 end
+
+# Habits can't be added from the site until the add-habit story, so john gets a few to try the list on. Only when he has
+# none: habits he added himself are never touched, and running this again adds nothing.
+john = User.find_by!(username: "john")
+unless john.habits.exists?
+  [ "Drink water", "Read 20 pages", "Stretch" ].each { |name| john.habits.create!(name: name) }
+  puts "Seeded 3 habits for john"
+end

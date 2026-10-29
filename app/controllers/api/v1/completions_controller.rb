@@ -25,6 +25,13 @@ module Api
         render_error "not_found", "Habit not found.", :not_found
       end
 
+      # DELETE marks the day as not done. Scoped to the habit that was already found, and a day that was never done is
+      # not an error.
+      def destroy
+        @habit.habit_completions.where(date: @date).delete_all
+        head :no_content
+      end
+
       private
 
       # Scoped to the caller's habits, so a habit that belongs to someone else raises RecordNotFound (404).

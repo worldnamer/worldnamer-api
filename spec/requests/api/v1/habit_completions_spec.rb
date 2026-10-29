@@ -221,4 +221,131 @@ RSpec.describe "/api/v1/habits/:habit_id/completions/:date", type: :request do
       expect(captured_sentry_events).to be_empty
     end
   end
+
+  describe "DELETE" do
+    it "removes only that date's row and answers 204 with no body" do
+      other_habit = create(:habit, user: user)
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 27))
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 28))
+      create(:habit_completion, habit: other_habit, date: Date.new(2026, 10, 28))
+
+      delete completion_path(habit, "2026-10-28"), headers: bearer(token_for)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      expect(rows).to contain_exactly([ habit.id, Date.new(2026, 10, 27) ], [ other_habit.id, Date.new(2026, 10, 28) ])
+    end
+
+    it "answers 204 again for a repeat, and for a date that was never ticked, and changes nothing else" do
+      kept = create(:habit_completion, habit: habit, date: Date.new(2026, 10, 27))
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 28))
+      token = token_for
+
+      delete completion_path(habit, "2026-10-28"), headers: bearer(token)
+      delete completion_path(habit, "2026-10-28"), headers: bearer(token)
+      expect(response).to have_http_status(:no_content)
+
+      delete completion_path(habit, "2026-11-30"), headers: bearer(token)
+      expect(response).to have_http_status(:no_content)
+      expect(HabitCompletion.all).to contain_exactly(kept)
+    end
+
+    it "no longer lists the date in the following GET" do
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 28))
+      token = token_for
+
+      delete completion_path(habit, "2026-10-28"), headers: bearer(token)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token)
+
+      expect(response.parsed_body["habits"]).to eq([ { "id" => habit.id, "name" => "Stretch", "completed_dates" => [] } ])
+    end
+
+    it "undoes a PUT" do
+      token = token_for
+
+      put completion_path(habit, "2026-10-28"), headers: bearer(token)
+      delete completion_path(habit, "2026-10-28"), headers: bearer(token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(HabitCompletion.count).to eq(0)
+    end
+
+    it "answers 404 for another user's habit and leaves their rows alone" do
+      theirs = create(:habit, user: create(:user))
+      existing = create(:habit_completion, habit: theirs, date: Date.new(2026, 10, 28))
+
+      expect {
+        delete completion_path(theirs, "2026-10-28"), headers: bearer(token_for)
+      }.not_to change(HabitCompletion, :count)
+
+      expect_not_found
+      expect(HabitCompletion.all).to contain_exactly(existing)
+    end
+
+    it "answers 404 for a missing, non-numeric or out-of-range habit id" do
+      token = token_for
+
+      [ "999999", "abc", "-1", "99999999999999999999999999" ].each do |id|
+        delete completion_path(id, "2026-10-28"), headers: bearer(token)
+        expect_not_found
+      end
+    end
+
+    it "answers 400 for a bad date and deletes nothing" do
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 28))
+      token = token_for
+
+      %w[abc 2026-02-30 20261026 1899-12-31 2026-10-26%0A].each do |date|
+        delete completion_path(habit, date), headers: bearer(token)
+
+        expect_bad_date
+      end
+      expect(HabitCompletion.count).to eq(1)
+    end
+
+    it "checks the habit before the date: another user's habit with a bad date is a 404" do
+      theirs = create(:habit, user: create(:user))
+
+      delete completion_path(theirs, "not-a-date"), headers: bearer(token_for)
+
+      expect_not_found
+    end
+
+    it "answers 401 with no token or a bad token, and changes nothing, even for another user's habit" do
+      theirs = create(:habit, user: create(:user))
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 28))
+      create(:habit_completion, habit: theirs, date: Date.new(2026, 10, 28))
+
+      expect {
+        [ habit, theirs ].each do |target|
+          delete completion_path(target, "2026-10-28")
+          expect_unauthenticated
+
+          delete completion_path(target, "2026-10-28"), headers: bearer("this.is.notajwt")
+          expect_unauthenticated
+        end
+      }.not_to change(HabitCompletion, :count)
+    end
+
+    it "ignores user_id, habit_id and date in a JSON body" do
+      other_habit = create(:habit, user: create(:user))
+      create(:habit_completion, habit: other_habit, date: Date.new(2026, 10, 28))
+      create(:habit_completion, habit: habit, date: Date.new(2026, 10, 28))
+      create(:habit_completion, habit: habit, date: Date.new(2020, 1, 1))
+
+      delete completion_path(habit, "2026-10-28"),
+             params: { user_id: other_habit.user_id, habit_id: other_habit.id, date: "2020-01-01" },
+             as: :json, headers: bearer(token_for)
+
+      expect(response).to have_http_status(:no_content)
+      expect(rows).to contain_exactly([ other_habit.id, Date.new(2026, 10, 28) ], [ habit.id, Date.new(2020, 1, 1) ])
+    end
+
+    it "produces no Sentry event for a bad date" do
+      delete completion_path(habit, "not-a-date"), headers: bearer(token_for)
+
+      expect_bad_date
+      expect(captured_sentry_events).to be_empty
+    end
+  end
 end

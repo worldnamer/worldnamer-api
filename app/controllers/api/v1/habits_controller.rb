@@ -28,7 +28,7 @@ module Api
       end
 
       # DELETE /api/v1/habits/:id. Someone else's habit and a missing one get the same 404, so existence is not revealed.
-      # destroy! (not delete) so the callbacks that later delete a habit's check-ins will run.
+      # destroy! (not delete) so the callbacks that delete a habit's completions run.
       def destroy
         current_user.habits.find(params[:id]).destroy!
         head :no_content

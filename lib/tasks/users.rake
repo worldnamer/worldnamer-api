@@ -31,9 +31,11 @@ namespace :users do
     user = User.find_or_initialize_by(username: username)
     action = user.new_record? ? "created" : "updated"
     user.password = password
-    user.save!
-
-    # Later (api-2): delete this user's refresh tokens here, so a password change ends every session.
+    User.transaction do
+      user.save!
+      # A changed password ends every session of that user (all families: active, used and expired).
+      RefreshToken.where(user_id: user.id).delete_all if action == "updated"
+    end
 
     puts "User #{user.username} #{action}"
   end

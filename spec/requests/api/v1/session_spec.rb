@@ -109,7 +109,7 @@ RSpec.describe "POST /api/v1/session", type: :request do
     end
 
     context "with no body at all" do
-      let(:attempt) { post "/api/v1/session" }
+      let(:attempt) { post "/api/v1/session", headers: origin_headers }
 
       it_behaves_like "an invalid credentials response"
     end

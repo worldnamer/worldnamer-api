@@ -4,7 +4,8 @@
 # It is enforced by the browser, not the server: it does not stop curl or other non-browser clients.
 # Read more: https://github.com/cyu/rack-cors
 
-allowed_origins = Rails.env.production? ? [ "https://worldnamer.com" ] : [ "http://localhost:5173" ]
+# The list lives in config/application.rb (config.x.allowed_origins); the session endpoints check it too.
+allowed_origins = Rails.application.config.x.allowed_origins
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do

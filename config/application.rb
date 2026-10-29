@@ -1,4 +1,5 @@
 require_relative "boot"
+require_relative "allowed_origins"
 
 require "rails"
 # Pick the frameworks you want:
@@ -50,6 +51,7 @@ module WorldnamerApi
 
     # The one list of browser origins allowed to call this API. Shared by CORS (config/initializers/cors.rb) and the
     # Origin check on the session endpoints (Api::V1::SessionsController).
-    config.x.allowed_origins = Rails.env.production? ? [ "https://worldnamer.com" ] : [ "http://localhost:5173" ]
+    # Outside production ALLOWED_ORIGINS can replace the default; production ignores it (config/allowed_origins.rb).
+    config.x.allowed_origins = AllowedOrigins.from(ENV, production: Rails.env.production?)
   end
 end

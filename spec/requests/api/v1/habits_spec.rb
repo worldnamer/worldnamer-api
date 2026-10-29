@@ -68,4 +68,134 @@ RSpec.describe "/api/v1/habits", type: :request do
       expect(response.parsed_body["habits"]).to eq([ { "id" => mine.id, "name" => "Mine" } ])
     end
   end
+
+  describe "POST /api/v1/habits" do
+    def post_habit(body, token: token_for)
+      post "/api/v1/habits", params: body, as: :json, headers: bearer(token)
+    end
+
+    def expect_error(status, code, message)
+      expect(response).to have_http_status(status)
+      expect(response.parsed_body).to eq("error" => { "code" => code, "message" => message })
+    end
+
+    it "returns 401 unauthenticated with no token or a bad token, and creates nothing" do
+      expect {
+        post "/api/v1/habits", params: { habit: { name: "Stretch" } }, as: :json
+        expect_unauthenticated
+
+        post "/api/v1/habits", params: { habit: { name: "Stretch" } }, as: :json, headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+      }.not_to change(Habit, :count)
+    end
+
+    it "creates the habit for the caller and returns 201 with its id and name" do
+      post_habit({ habit: { name: "Stretch" } })
+
+      habit = Habit.last
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body).to eq("habit" => { "id" => habit.id, "name" => "Stretch" })
+      expect(response.headers["Location"]).to be_nil
+      expect(habit.user).to eq(user)
+    end
+
+    it "lists the new habit last" do
+      create(:habit, user: user, name: "Older", created_at: 1.day.ago)
+      token = token_for
+
+      post_habit({ habit: { name: "Stretch" } }, token: token)
+      get "/api/v1/habits", headers: bearer(token)
+
+      expect(response.parsed_body["habits"].map { |habit| habit["name"] }).to eq([ "Older", "Stretch" ])
+    end
+
+    it "strips spaces at the start and end of the name" do
+      post_habit({ habit: { name: "  Stretch  " } })
+
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body["habit"]["name"]).to eq("Stretch")
+      expect(Habit.last.name).to eq("Stretch")
+    end
+
+    it "refuses an empty, whitespace-only or missing name with 422 and creates nothing" do
+      token = token_for
+
+      expect {
+        [ { name: "" }, { name: "   " }, { name: nil }, { name: "\u00A0" } ].each do |habit|
+          post_habit({ habit: habit }, token: token)
+          expect_error(:unprocessable_content, "validation_failed", "Name can't be blank.")
+        end
+      }.not_to change(Habit, :count)
+    end
+
+    it "returns 400 for a habit hash that has no name key at all" do
+      # params.expect treats a hash with none of the permitted keys as a malformed body, so this is not a 422.
+      post_habit({ habit: { other: "x" } })
+
+      expect_error(:bad_request, "bad_request", "Request body is malformed.")
+    end
+
+    it "accepts 100 characters and 100 multibyte characters, and refuses 101" do
+      token = token_for
+
+      post_habit({ habit: { name: "a" * 100 } }, token: token)
+      expect(response).to have_http_status(:created)
+
+      post_habit({ habit: { name: "é" * 100 } }, token: token)
+      expect(response).to have_http_status(:created)
+
+      expect {
+        post_habit({ habit: { name: "a" * 101 } }, token: token)
+      }.not_to change(Habit, :count)
+      expect_error(:unprocessable_content, "validation_failed", "Name is too long (maximum is 100 characters).")
+    end
+
+    it "creates two habits when the same name is posted twice" do
+      token = token_for
+
+      expect {
+        2.times { post_habit({ habit: { name: "Stretch" } }, token: token) }
+      }.to change(Habit, :count).by(2)
+    end
+
+    it "ignores user_id and id in the body" do
+      other = create(:user)
+
+      post_habit({ habit: { name: "Stretch", user_id: other.id, id: 999_999 } })
+
+      habit = Habit.last
+      expect(response).to have_http_status(:created)
+      expect(habit.user).to eq(user)
+      expect(habit.id).not_to eq(999_999)
+      expect(other.habits).to be_empty
+    end
+
+    it "puts the habit name in no span attribute or event" do
+      name = "SENTINEL-habit-3c9e1b7a-do-not-trace"
+      token = token_for
+      TelemetryHelpers.reset
+
+      post_habit({ habit: { name: name } }, token: token)
+
+      expect(response).to have_http_status(:created)
+      spans = captured_spans
+      # Non-vacuous: the request and its insert were traced.
+      expect(spans).not_to be_empty
+      dumped = spans.map { |span| [ span.name, span.attributes, Array(span.events).map { |e| [ e.name, e.attributes ] } ] }.inspect
+      expect(dumped).to include("/api/v1/habits")
+      expect(dumped).not_to include(name)
+    end
+
+    it "returns 400 bad_request when the habit key is missing, even if name is at the top level" do
+      token = token_for
+
+      expect {
+        post_habit({ name: "Stretch" }, token: token)
+        expect_error(:bad_request, "bad_request", "Request body is malformed.")
+
+        post_habit({ habit: "Stretch" }, token: token)
+        expect_error(:bad_request, "bad_request", "Request body is malformed.")
+      }.not_to change(Habit, :count)
+    end
+  end
 end

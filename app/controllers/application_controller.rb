@@ -1,4 +1,9 @@
 class ApplicationController < ActionController::API
+  # find on a scope raises this when the row is missing, not numeric, or out of range.
+  rescue_from ActiveRecord::RecordNotFound do
+    render_error "not_found", "Habit not found.", :not_found
+  end
+
   # params.expect raises this when a required key is missing or has the wrong shape.
   rescue_from ActionController::ParameterMissing do
     render_error "bad_request", "Request body is malformed.", :bad_request

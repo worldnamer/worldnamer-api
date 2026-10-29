@@ -14,6 +14,11 @@ RSpec.describe "/api/v1/habits", type: :request do
     expect(response.parsed_body).to match(expected_unauthenticated_body)
   end
 
+  def expect_not_found
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Habit not found." })
+  end
+
   describe "GET /api/v1/habits" do
     it "returns 401 unauthenticated with no token, a malformed token or an expired token" do
       get "/api/v1/habits"
@@ -196,6 +201,76 @@ RSpec.describe "/api/v1/habits", type: :request do
         post_habit({ habit: "Stretch" }, token: token)
         expect_error(:bad_request, "bad_request", "Request body is malformed.")
       }.not_to change(Habit, :count)
+    end
+  end
+
+  describe "DELETE /api/v1/habits/:id" do
+    it "returns 401 unauthenticated with no token or a bad token, and leaves the habit" do
+      habit = create(:habit, user: user)
+
+      expect {
+        delete "/api/v1/habits/#{habit.id}"
+        expect_unauthenticated
+
+        delete "/api/v1/habits/#{habit.id}", headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+      }.not_to change(Habit, :count)
+    end
+
+    it "deletes your own habit with 204 and no body, and the list no longer has it" do
+      keep = create(:habit, user: user, name: "Keep")
+      gone = create(:habit, user: user, name: "Gone")
+      token = token_for
+
+      delete "/api/v1/habits/#{gone.id}", headers: bearer(token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      get "/api/v1/habits", headers: bearer(token)
+      expect(response.parsed_body["habits"]).to eq([ { "id" => keep.id, "name" => "Keep" } ])
+    end
+
+    it "returns 404 not_found for another user's habit and leaves it" do
+      theirs = create(:habit, user: create(:user))
+      token = token_for
+
+      expect {
+        delete "/api/v1/habits/#{theirs.id}", headers: bearer(token)
+      }.not_to change(Habit, :count)
+
+      expect_not_found
+      expect(Habit.exists?(theirs.id)).to be(true)
+    end
+
+    it "returns the same body for another user's habit as for a missing one" do
+      theirs = create(:habit, user: create(:user))
+      token = token_for
+
+      delete "/api/v1/habits/#{theirs.id}", headers: bearer(token)
+      other_users_body = response.parsed_body
+      delete "/api/v1/habits/#{theirs.id + 1000}", headers: bearer(token)
+
+      expect(response.parsed_body).to eq(other_users_body)
+    end
+
+    it "returns 404 for a missing, non-numeric or out-of-range id" do
+      token = token_for
+
+      [ "999999", "abc", "1.5", "-1", "99999999999999999999999999" ].each do |id|
+        delete "/api/v1/habits/#{id}", headers: bearer(token)
+        expect_not_found
+      end
+    end
+
+    it "returns 404 on a second delete of the same id" do
+      habit = create(:habit, user: user)
+      token = token_for
+
+      delete "/api/v1/habits/#{habit.id}", headers: bearer(token)
+      expect(response).to have_http_status(:no_content)
+
+      delete "/api/v1/habits/#{habit.id}", headers: bearer(token)
+      expect_not_found
     end
   end
 end

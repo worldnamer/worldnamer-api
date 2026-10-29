@@ -1,9 +1,15 @@
-# This file should ensure the existence of records required to run the application in every environment (production,
-# development, test). The code here should be idempotent so that it can be executed at any point in every environment.
-# The data can then be loaded with the bin/rails db:seed command (or created alongside the database with db:setup).
-#
-# Example:
-#
-#   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
-#     MovieGenre.find_or_create_by!(name: genre_name)
-#   end
+# Creates the known development user so a story can log in without a terminal (users:create needs a TTY).
+# bin/rails db:seed runs this; db:setup and db:prepare run it too on a fresh database.
+
+# The password below is public (it is in the web mock), so production must never get this user. This guard
+# comes first and returns before the database is touched.
+if Rails.env.production?
+  puts "Skipped db/seeds.rb: the seed user is for development and test only."
+  return
+end
+
+# An existing john is left completely alone: his password may be one the developer chose.
+unless User.find_by(username: "john")
+  User.create!(username: "john", password: "correct horse battery")
+  puts "Seeded user john"
+end

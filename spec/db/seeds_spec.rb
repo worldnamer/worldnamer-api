@@ -12,8 +12,12 @@ RSpec.describe "db/seeds.rb", type: :request do
     json_post "/api/v1/session", { username: username, password: password }
   end
 
-  # The test database may hold a seeded john (db:prepare seeds a fresh one); start from none.
-  before { User.where(username: "john").delete_all }
+  def stub_env(name)
+    allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new(name))
+  end
+
+  context "in development" do
+    before { stub_env("development") }
 
   it "creates john, who can log in with the seed password" do
     expect { run_seed }.to change(User, :count).by(1)
@@ -44,20 +48,25 @@ RSpec.describe "db/seeds.rb", type: :request do
     login_as("john", seed_password)
     expect(response).to have_http_status(:unauthorized)
   end
+  end
 
-  describe "in production" do
-    before { allow(Rails.env).to receive(:production?).and_return(true) }
-
-    it "creates nothing and says it skipped" do
-      expect { expect { run_seed }.to output(/skipp/i).to_stdout }.not_to change(User, :count)
-    end
-
-    it "does not touch the database at all" do
+  %w[production staging].each do |name|
+    it "creates nothing in #{name} and never touches User" do
+      stub_env(name)
       expect(User).not_to receive(:find_by)
       expect(User).not_to receive(:create!)
       expect(User).not_to receive(:new)
 
       expect { run_seed }.to output(/skipp/i).to_stdout
     end
+  end
+
+  it "creates nothing in the real test environment and never touches User" do
+    expect(Rails.env).to be_test
+    expect(User).not_to receive(:find_by)
+    expect(User).not_to receive(:create!)
+
+    expect { run_seed }.to output(/skipp/i).to_stdout
+    expect(User.count).to eq(0)
   end
 end

@@ -43,5 +43,13 @@ module WorldnamerApi
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    # API-only apps leave the cookie middleware out. Only the refresh-token cookie uses it (no session store, no
+    # flash). Controllers that touch cookies include ActionController::Cookies.
+    config.middleware.use ActionDispatch::Cookies
+
+    # The one list of browser origins allowed to call this API. Shared by CORS (config/initializers/cors.rb) and the
+    # Origin check on the session endpoints (Api::V1::SessionsController).
+    config.x.allowed_origins = Rails.env.production? ? [ "https://worldnamer.com" ] : [ "http://localhost:5173" ]
   end
 end

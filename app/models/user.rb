@@ -11,6 +11,9 @@ class User < ApplicationRecord
   # so a deleted user's completions go through that cascade too.
   has_many :habits, dependent: :delete_all
 
+  # Lists have no callbacks either; the foreign key cascades in the database as well.
+  has_many :task_lists, dependent: :delete_all
+
   # Devise lowercases and strips :username (case_insensitive_keys / strip_whitespace_keys in config/initializers/devise.rb)
   # before validation, so a plain uniqueness check is case-insensitive.
   validates :username, presence: true, uniqueness: true

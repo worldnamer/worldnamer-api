@@ -23,8 +23,8 @@ module Api
           end
         end
 
-        habits = current_user.habits.order(:created_at, :id).to_a
-        dates_by_habit = week_start ? completed_dates_by_habit(habits, week_start) : {}
+        habits = current_user.habits.order(:created_at, :id)
+        dates_by_habit = week_start ? habits.completed_dates_in_week(week_start) : {}
         render json: { habits: habits.map { |habit| habit_json(habit, dates_by_habit.fetch(habit.id, [])) } }
       end
 
@@ -50,16 +50,6 @@ module Api
 
       def habit_json(habit, completed_dates)
         { id: habit.id, name: habit.name, completed_dates: completed_dates }
-      end
-
-      # One query for the whole week, however many habits there are (a query per habit would be an N+1). The ids come
-      # from the caller's own habits, so another user's completions cannot be read.
-      def completed_dates_by_habit(habits, week_start)
-        HabitCompletion.where(habit_id: habits.map(&:id), date: week_start..(week_start + 6))
-                       .order(:date)
-                       .pluck(:habit_id, :date)
-                       .group_by(&:first)
-                       .transform_values { |rows| rows.map { |_habit_id, date| date.iso8601 } }
       end
     end
   end

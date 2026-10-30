@@ -15,6 +15,7 @@ Rails.application.routes.draw do
       post "session/refresh", to: "sessions#refresh"
       delete "session", to: "sessions#destroy"
       get "me", to: "me#show"
+      resource :task_list_order, only: :update
       resources :task_lists, only: %i[index create update destroy]
       resources :habits, only: %i[index create destroy] do
         # /habits/:habit_id/completions/:date. param: :date names the segment :date instead of :id.

@@ -320,4 +320,68 @@ RSpec.describe "/api/v1/task_lists", type: :request do
       expect(dumped).not_to include(name)
     end
   end
+
+  describe "DELETE /api/v1/task_lists/:id" do
+    def expect_not_found
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Not found." })
+    end
+
+    it "returns 401 unauthenticated with no token or a bad token, and leaves the list" do
+      list = create(:task_list, user: user)
+
+      expect {
+        delete "/api/v1/task_lists/#{list.id}"
+        expect_unauthenticated
+
+        delete "/api/v1/task_lists/#{list.id}", headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+      }.not_to change(TaskList, :count)
+    end
+
+    it "deletes your own list with 204 and no body, and the list is gone from GET" do
+      keep = create(:task_list, user: user, name: "Keep")
+      gone = create(:task_list, user: user, name: "Gone")
+      token = token_for
+
+      delete "/api/v1/task_lists/#{gone.id}", headers: bearer(token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      get "/api/v1/task_lists", headers: bearer(token)
+      expect(response.parsed_body["task_lists"]).to eq([ { "id" => keep.id, "name" => "Keep" } ])
+    end
+
+    it "returns 404 for another user's list and keeps it" do
+      theirs = create(:task_list, user: create(:user))
+      token = token_for
+
+      expect {
+        delete "/api/v1/task_lists/#{theirs.id}", headers: bearer(token)
+      }.not_to change(TaskList, :count)
+
+      expect_not_found
+      expect(TaskList.exists?(theirs.id)).to be(true)
+    end
+
+    it "returns 404 for a missing, non-numeric or out-of-range id" do
+      token = token_for
+
+      [ "999999", "abc", "1.5", "-1", "99999999999999999999999999" ].each do |id|
+        delete "/api/v1/task_lists/#{id}", headers: bearer(token)
+        expect_not_found
+      end
+    end
+
+    it "returns 404 on a second delete of the same id" do
+      list = create(:task_list, user: user)
+      token = token_for
+
+      delete "/api/v1/task_lists/#{list.id}", headers: bearer(token)
+      expect(response).to have_http_status(:no_content)
+
+      delete "/api/v1/task_lists/#{list.id}", headers: bearer(token)
+      expect_not_found
+    end
+  end
 end

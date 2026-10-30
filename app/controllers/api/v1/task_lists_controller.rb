@@ -38,6 +38,13 @@ module Api
         end
       end
 
+      # DELETE /api/v1/task_lists/:id. Someone else's list and a missing one get the same 404, so existence is not
+      # revealed, and a second delete of the same id is a 404 too. The remaining lists keep their positions, leaving a gap.
+      def destroy
+        current_user.task_lists.find(params[:id]).destroy!
+        head :no_content
+      end
+
       private
 
       # Only id and name leave the API: user_id and position stay inside.

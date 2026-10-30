@@ -101,6 +101,30 @@ RSpec.describe Habit, type: :model do
     end
   end
 
+  describe "deleting a habit" do
+    let(:habit) { create(:habit) }
+    let(:monday) { Date.new(2026, 10, 26) }
+
+    before { (0..2).each { |offset| create(:habit_completion, habit: habit, date: monday + offset) } }
+
+    it "deletes its completions and no one else's" do
+      other = create(:habit_completion)
+
+      expect { habit.destroy! }.to change(HabitCompletion, :count).by(-3)
+      expect(HabitCompletion.all).to contain_exactly(other)
+    end
+
+    it "deletes its completions in one statement, however many there are" do
+      statements = []
+      callback = lambda do |*, payload|
+        statements << payload[:sql] if payload[:sql].include?('DELETE FROM "habit_completions"')
+      end
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { habit.destroy! }
+
+      expect(statements.size).to eq(1)
+    end
+  end
+
   describe ".completed_dates_in_week" do
     let(:monday) { Date.new(2026, 10, 26) }
     let(:user) { create(:user) }

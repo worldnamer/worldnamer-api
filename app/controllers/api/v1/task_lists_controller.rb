@@ -27,6 +27,17 @@ module Api
         end
       end
 
+      # PATCH /api/v1/task_lists/:id renames a list. Someone else's list and a missing one get the same 404, so existence
+      # is not revealed. Only name is permitted: position changes only through the order endpoint.
+      def update
+        list = current_user.task_lists.find(params[:id])
+        if list.update(params.expect(task_list: [ :name ]))
+          render json: { task_list: task_list_json(list) }
+        else
+          render_error "validation_failed", "#{list.errors.full_messages.first}.", :unprocessable_content
+        end
+      end
+
       private
 
       # Only id and name leave the API: user_id and position stay inside.

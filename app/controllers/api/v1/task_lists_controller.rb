@@ -15,6 +15,18 @@ module Api
         render json: { task_lists: current_user.task_lists.in_order.map { |list| task_list_json(list) } }
       end
 
+      # POST /api/v1/task_lists. The owner comes from the token and the position from the model (the end of the list):
+      # params.expect permits only name, so user_id, id and position in the body are dropped. A blank or nil name is
+      # stored as "".
+      def create
+        list = current_user.task_lists.build(params.expect(task_list: [ :name ]))
+        if list.save
+          render json: { task_list: task_list_json(list) }, status: :created
+        else
+          render_error "validation_failed", "#{list.errors.full_messages.first}.", :unprocessable_content
+        end
+      end
+
       private
 
       # Only id and name leave the API: user_id and position stay inside.

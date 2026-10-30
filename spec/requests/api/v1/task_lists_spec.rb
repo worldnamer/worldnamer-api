@@ -214,4 +214,110 @@ RSpec.describe "/api/v1/task_lists", type: :request do
       expect(dumped).not_to include(name)
     end
   end
+
+  describe "PATCH /api/v1/task_lists/:id" do
+    let!(:list) { create(:task_list, user: user, name: "Errands", position: 2) }
+
+    def patch_list(id, body, token: token_for)
+      patch "/api/v1/task_lists/#{id}", params: body, as: :json, headers: bearer(token)
+    end
+
+    def expect_error(status, code, message)
+      expect(response).to have_http_status(status)
+      expect(response.parsed_body).to eq("error" => { "code" => code, "message" => message })
+    end
+
+    def expect_not_found
+      expect_error(:not_found, "not_found", "Not found.")
+    end
+
+    it "returns 401 unauthenticated with no token or a bad token, and leaves the name" do
+      patch "/api/v1/task_lists/#{list.id}", params: { task_list: { name: "Changed" } }, as: :json
+      expect_unauthenticated
+
+      patch "/api/v1/task_lists/#{list.id}", params: { task_list: { name: "Changed" } }, as: :json,
+                                             headers: bearer("this.is.notajwt")
+      expect_unauthenticated
+
+      expect(list.reload.name).to eq("Errands")
+    end
+
+    it "renames the list and returns 200 with its id and name" do
+      patch_list(list.id, { task_list: { name: "Shopping" } })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq("task_list" => { "id" => list.id, "name" => "Shopping" })
+      expect(list.reload.name).to eq("Shopping")
+    end
+
+    it "accepts a blank name, and strips spaces" do
+      patch_list(list.id, { task_list: { name: "   " } })
+      expect(response).to have_http_status(:ok)
+      expect(list.reload.name).to eq("")
+
+      patch_list(list.id, { task_list: { name: "  Shopping  " } })
+      expect(response.parsed_body["task_list"]["name"]).to eq("Shopping")
+    end
+
+    it "refuses 101 characters with 422 and leaves the name unchanged" do
+      patch_list(list.id, { task_list: { name: "a" * 101 } })
+
+      expect_error(:unprocessable_content, "validation_failed", "Name is too long (maximum is 100 characters).")
+      expect(list.reload.name).to eq("Errands")
+    end
+
+    it "returns 400 when the task_list key is missing" do
+      patch_list(list.id, { name: "Shopping" })
+
+      expect_error(:bad_request, "bad_request", "Request body is malformed.")
+      expect(list.reload.name).to eq("Errands")
+    end
+
+    it "ignores user_id, id and position in the body" do
+      other = create(:user)
+
+      patch_list(list.id, { task_list: { name: "Shopping", user_id: other.id, id: 999_999, position: 50 } })
+
+      expect(response).to have_http_status(:ok)
+      list.reload
+      expect(list.user).to eq(user)
+      expect(list.position).to eq(2)
+      expect(response.parsed_body["task_list"]["id"]).to eq(list.id)
+    end
+
+    it "returns 404 for another user's list and leaves it unchanged" do
+      theirs = create(:task_list, user: create(:user), name: "Theirs")
+
+      patch_list(theirs.id, { task_list: { name: "Mine now" } })
+
+      expect_not_found
+      expect(theirs.reload.name).to eq("Theirs")
+    end
+
+    it "returns the same 404 body for another user's, a missing, a non-numeric and an out-of-range id" do
+      theirs = create(:task_list, user: create(:user))
+      token = token_for
+
+      [ theirs.id.to_s, (theirs.id + 1000).to_s, "abc", "1.5", "-1", "99999999999999999999999999" ].each do |id|
+        patch_list(id, { task_list: { name: "x" } }, token: token)
+        expect_not_found
+      end
+    end
+
+    it "puts the list name in no span attribute or event" do
+      name = "SENTINEL-rename-9a4c6e12-do-not-trace"
+      token = token_for
+      TelemetryHelpers.reset
+
+      patch_list(list.id, { task_list: { name: name } }, token: token)
+
+      expect(response).to have_http_status(:ok)
+      spans = captured_spans
+      # Non-vacuous: the request and its update were traced.
+      expect(spans).not_to be_empty
+      dumped = spans.map { |span| [ span.name, span.attributes, Array(span.events).map { |e| [ e.name, e.attributes ] } ] }.inspect
+      expect(dumped).to include("/api/v1/task_lists")
+      expect(dumped).not_to include(name)
+    end
+  end
 end

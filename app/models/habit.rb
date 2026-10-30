@@ -1,8 +1,9 @@
 class Habit < ApplicationRecord
   belongs_to :user
 
-  # destroy runs each completion's callbacks; the foreign key also cascades in the database for deletes that skip them.
-  has_many :habit_completions, dependent: :destroy
+  # One DELETE for all of a habit's completions, since a daily habit gathers a row a day and HabitCompletion has no
+  # callbacks to run; the foreign key also cascades in the database for deletes that skip the model.
+  has_many :habit_completions, dependent: :delete_all
 
   # Runs on assignment and in finders, so " Stretch " is stored (and looked up) as "Stretch".
   normalizes :name, with: ->(name) { name.strip }

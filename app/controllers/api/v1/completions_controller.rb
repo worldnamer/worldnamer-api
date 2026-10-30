@@ -22,7 +22,7 @@ module Api
         head :no_content
       rescue ActiveRecord::InvalidForeignKey
         # The habit was deleted (another tab) between the lookup above and the insert: the same 404 as a missing habit.
-        render_error "not_found", "Habit not found.", :not_found
+        render_error "not_found", "Not found.", :not_found
       end
 
       # DELETE marks the day as not done. Scoped to the habit that was already found, and a day that was never done is

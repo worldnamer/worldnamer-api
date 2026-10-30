@@ -1,7 +1,7 @@
 class ApplicationController < ActionController::API
-  # find on a scope raises this when the row is missing, not numeric, or out of range.
+  # Shared by every controller, so the message names no resource. find on a scope raises this when the row is missing, not numeric, or out of range.
   rescue_from ActiveRecord::RecordNotFound do
-    render_error "not_found", "Habit not found.", :not_found
+    render_error "not_found", "Not found.", :not_found
   end
 
   # params.expect raises this when a required key is missing or has the wrong shape.

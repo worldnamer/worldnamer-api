@@ -12,19 +12,20 @@ module Api
       # GET /api/v1/habits. Every query starts from current_user.habits, never Habit.find, so a habit that belongs to
       # someone else cannot be reached. id breaks ties between habits created in the same instant.
       #
-      # With week_start (a Monday, YYYY-MM-DD) each habit lists the dates it was completed that week. Without the key
-      # the lists are empty and no completions are read. A present but empty or non-string value is a 400.
+      # week_start (a Monday, YYYY-MM-DD) is required, and each habit lists the dates it was completed that week. A
+      # missing key, and a value that is empty, not a string or not a Monday, are each a 400.
       def index
-        week_start = nil
-        if params.key?(:week_start)
-          week_start = IsoDate.parse(params[:week_start])
-          unless week_start&.monday?
-            return render_error "bad_request", "week_start must be a Monday in the form YYYY-MM-DD.", :bad_request
-          end
+        unless params.key?(:week_start)
+          return render_error "bad_request", "week_start is required.", :bad_request
+        end
+
+        week_start = IsoDate.parse(params[:week_start])
+        unless week_start&.monday?
+          return render_error "bad_request", "week_start must be a Monday in the form YYYY-MM-DD.", :bad_request
         end
 
         habits = current_user.habits.order(:created_at, :id)
-        dates_by_habit = week_start ? habits.completed_dates_in_week(week_start) : {}
+        dates_by_habit = habits.completed_dates_in_week(week_start)
         render json: { habits: habits.map { |habit| habit_json(habit, dates_by_habit.fetch(habit.id, [])) } }
       end
 

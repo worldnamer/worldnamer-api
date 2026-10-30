@@ -16,7 +16,7 @@ RSpec.describe "/api/v1/habits", type: :request do
 
   def expect_not_found
     expect(response).to have_http_status(:not_found)
-    expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Habit not found." })
+    expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Not found." })
   end
 
   describe "GET /api/v1/habits" do

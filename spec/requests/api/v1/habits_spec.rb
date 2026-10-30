@@ -1,6 +1,6 @@
 require "rails_helper"
 
-# Plan section 6, API scenarios 1 to 5 and 10 to 14 (one describe per endpoint).
+# One describe per endpoint.
 RSpec.describe "/api/v1/habits", type: :request do
   let!(:user) { create(:user, username: "john") }
 
@@ -41,7 +41,7 @@ RSpec.describe "/api/v1/habits", type: :request do
       expect(response.parsed_body).to eq("habits" => [])
     end
 
-    it "returns the caller's habits oldest first, each with only id and name" do
+    it "returns the caller's habits oldest first, each with only id, name and completed_dates" do
       newest = create(:habit, user: user, name: "Newest", created_at: 1.hour.ago)
       oldest = create(:habit, user: user, name: "Oldest", created_at: 3.hours.ago)
       middle = create(:habit, user: user, name: "Middle", created_at: 2.hours.ago)
@@ -50,7 +50,9 @@ RSpec.describe "/api/v1/habits", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq(
-        "habits" => [ oldest, middle, newest ].map { |habit| { "id" => habit.id, "name" => habit.name } }
+        "habits" => [ oldest, middle, newest ].map do |habit|
+          { "id" => habit.id, "name" => habit.name, "completed_dates" => [] }
+        end
       )
     end
 
@@ -70,7 +72,174 @@ RSpec.describe "/api/v1/habits", type: :request do
 
       get "/api/v1/habits", headers: bearer(token_for)
 
-      expect(response.parsed_body["habits"]).to eq([ { "id" => mine.id, "name" => "Mine" } ])
+      expect(response.parsed_body["habits"]).to eq([ { "id" => mine.id, "name" => "Mine", "completed_dates" => [] } ])
+    end
+
+    describe "completed_dates" do
+      let(:monday) { "2026-10-26" }
+      # let! so the login (which runs queries of its own) happens before any query counting starts.
+      let!(:token) { token_for }
+
+      def complete(habit, *dates)
+        dates.each { |date| create(:habit_completion, habit: habit, date: IsoDate.parse(date)) }
+      end
+
+      def get_week(week_start, token: self.token)
+        get "/api/v1/habits", params: { week_start: week_start }, headers: bearer(token)
+      end
+
+      def dates_by_name
+        response.parsed_body["habits"].to_h { |habit| [ habit["name"], habit["completed_dates"] ] }
+      end
+
+      # Counts the SQL statements a block runs, ignoring schema lookups and transaction control.
+      def sql_statements
+        statements = []
+        callback = lambda do |*, payload|
+          next if payload[:name] == "SCHEMA" || payload[:cached]
+
+          statements << payload[:sql]
+        end
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+        statements
+      end
+
+      it "gives every habit an empty list when week_start is left out, even if completions exist, and queries no completions" do
+        habit = create(:habit, user: user, name: "Stretch")
+        complete(habit, monday, "2026-10-28")
+
+        statements = sql_statements { get "/api/v1/habits", headers: bearer(token) }
+
+        expect(response).to have_http_status(:ok)
+        expect(dates_by_name).to eq("Stretch" => [])
+        expect(statements.grep(/habit_completions/)).to be_empty
+      end
+
+      it "returns only the dates inside the week, ascending, with the Monday and the Sunday included" do
+        habit = create(:habit, user: user, name: "Stretch")
+        complete(habit, "2026-11-01", "2026-10-28", monday, "2026-10-25", "2026-11-02")
+
+        get_week(monday)
+
+        expect(response).to have_http_status(:ok)
+        expect(dates_by_name).to eq("Stretch" => [ monday, "2026-10-28", "2026-11-01" ])
+      end
+
+      it "keeps each habit's dates apart" do
+        stretch = create(:habit, user: user, name: "Stretch", created_at: 2.hours.ago)
+        read = create(:habit, user: user, name: "Read", created_at: 1.hour.ago)
+        complete(stretch, monday, "2026-10-27")
+        complete(read, "2026-10-27", "2026-10-30")
+
+        get_week(monday)
+
+        expect(dates_by_name).to eq("Stretch" => [ monday, "2026-10-27" ], "Read" => [ "2026-10-27", "2026-10-30" ])
+        expect(response.parsed_body["habits"].map { |habit| habit["name"] }).to eq(%w[Stretch Read])
+      end
+
+      it "gives an empty list to a habit with no completions that week" do
+        busy = create(:habit, user: user, name: "Busy", created_at: 2.hours.ago)
+        idle = create(:habit, user: user, name: "Idle", created_at: 1.hour.ago)
+        complete(busy, "2026-10-27")
+        complete(idle, "2026-11-10")
+
+        get_week(monday)
+
+        expect(dates_by_name).to eq("Busy" => [ "2026-10-27" ], "Idle" => [])
+      end
+
+      it "returns one week per request" do
+        habit = create(:habit, user: user, name: "Stretch")
+        complete(habit, "2026-10-27", "2026-11-03", "2026-11-04")
+
+        get_week(monday)
+        expect(dates_by_name).to eq("Stretch" => [ "2026-10-27" ])
+
+        get_week("2026-11-02")
+        expect(dates_by_name).to eq("Stretch" => [ "2026-11-03", "2026-11-04" ])
+      end
+
+      it "never includes another user's habits or completions, even on the same dates" do
+        mine = create(:habit, user: user, name: "Mine")
+        theirs = create(:habit, user: create(:user), name: "Theirs")
+        complete(mine, "2026-10-27")
+        complete(theirs, "2026-10-27", "2026-10-28")
+
+        get_week(monday)
+
+        expect(dates_by_name).to eq("Mine" => [ "2026-10-27" ])
+      end
+
+      it "answers an empty list when there are no habits" do
+        get_week(monday)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq("habits" => [])
+      end
+
+      it "runs the same number of queries for one habit as for five, with one for completions" do
+        one = create(:habit, user: user)
+        complete(one, monday)
+        one_habit = sql_statements { get_week(monday) }
+
+        4.times { complete(create(:habit, user: user), monday, "2026-10-29") }
+        five_habits = sql_statements { get_week(monday) }
+
+        expect(response.parsed_body["habits"].size).to eq(5)
+        expect(five_habits.size).to eq(one_habit.size)
+        expect(five_habits.grep(/habit_completions/).size).to eq(1)
+      end
+
+      it "reaches the last supported week, whose Sunday is in year 9999" do
+        habit = create(:habit, user: user, name: "Stretch")
+        complete(habit, "9999-12-27", "9999-12-31")
+
+        get_week("9999-12-27")
+
+        expect(response).to have_http_status(:ok)
+        expect(dates_by_name).to eq("Stretch" => [ "9999-12-27", "9999-12-31" ])
+      end
+
+      it "reaches the first supported week" do
+        get_week("1900-01-01")
+
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "is not shared or public: Cache-Control contains private" do
+        get_week(monday)
+
+        expect(response.headers["Cache-Control"]).to include("private")
+      end
+
+      it "answers 400 for a week_start that is not a Monday in the form YYYY-MM-DD" do
+        create(:habit, user: user)
+        message = "week_start must be a Monday in the form YYYY-MM-DD."
+        bad_values = [
+          "abc", "20261026", "2026-10-5", "2026-02-30", "2026-W44-1", "2026-10-26\n", " 2026-10-26",
+          "1899-12-31", "0000-01-03", "99999-01-01", "2026-10-27", "",
+          [ "2026-10-26" ], [], { "a" => "2026-10-26" }
+        ]
+
+        bad_values.each do |value|
+          get_week(value)
+
+          expect(response).to have_http_status(:bad_request), "expected #{value.inspect} to be refused"
+          expect(response.parsed_body).to eq("error" => { "code" => "bad_request", "message" => message })
+        end
+      end
+
+      it "answers 400 for a bare week_start key in the query string" do
+        get "/api/v1/habits?week_start", headers: bearer(token)
+
+        expect(response).to have_http_status(:bad_request)
+      end
+
+      it "answers 401 before it looks at week_start" do
+        get "/api/v1/habits", params: { week_start: "garbage" }
+
+        expect_unauthenticated
+      end
     end
   end
 
@@ -227,7 +396,7 @@ RSpec.describe "/api/v1/habits", type: :request do
       expect(response).to have_http_status(:no_content)
       expect(response.body).to be_empty
       get "/api/v1/habits", headers: bearer(token)
-      expect(response.parsed_body["habits"]).to eq([ { "id" => keep.id, "name" => "Keep" } ])
+      expect(response.parsed_body["habits"]).to eq([ { "id" => keep.id, "name" => "Keep", "completed_dates" => [] } ])
     end
 
     it "returns 404 not_found for another user's habit and leaves it" do

@@ -7,7 +7,8 @@ class User < ApplicationRecord
   # One row per refresh token. delete_all because the rows have no callbacks, and the database cascades as well.
   has_many :refresh_tokens, dependent: :delete_all
 
-  # Habits have no callbacks either; the foreign key cascades in the database as well. Check-ins will hang off a habit later.
+  # Habits have no callbacks either; the foreign key cascades in the database as well. Completions hang off a habit,
+  # so a deleted user's completions go through that cascade too.
   has_many :habits, dependent: :delete_all
 
   # Devise lowercases and strips :username (case_insensitive_keys / strip_whitespace_keys in config/initializers/devise.rb)

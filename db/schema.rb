@@ -10,9 +10,17 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_29_202541) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_225714) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "habit_completions", force: :cascade do |t|
+    t.bigint "habit_id", null: false
+    t.date "date", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["habit_id", "date"], name: "index_habit_completions_on_habit_id_and_date", unique: true
+  end
 
   create_table "habits", force: :cascade do |t|
     t.bigint "user_id", null: false
@@ -213,6 +221,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_202541) do
     t.index ["username"], name: "index_users_on_username", unique: true
   end
 
+  add_foreign_key "habit_completions", "habits", on_delete: :cascade
   add_foreign_key "habits", "users", on_delete: :cascade
   add_foreign_key "refresh_tokens", "users", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_batches", column: "batch_id", on_delete: :cascade

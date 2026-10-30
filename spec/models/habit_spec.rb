@@ -100,4 +100,61 @@ RSpec.describe Habit, type: :model do
       expect { User.where(id: habit.user_id).delete_all }.to change(Habit, :count).by(-1)
     end
   end
+
+  describe ".completed_dates_in_week" do
+    let(:monday) { Date.new(2026, 10, 26) }
+    let(:user) { create(:user) }
+    let(:stretch) { create(:habit, user: user) }
+    let(:read) { create(:habit, user: user) }
+
+    def complete(habit, *dates)
+      dates.each { |date| create(:habit_completion, habit: habit, date: date) }
+    end
+
+    it "maps each habit id to its dates in the week as ISO strings, ascending" do
+      complete(stretch, monday + 2, monday)
+      complete(read, monday + 6)
+
+      expect(user.habits.completed_dates_in_week(monday)).to eq(
+        stretch.id => [ "2026-10-26", "2026-10-28" ],
+        read.id => [ "2026-11-01" ]
+      )
+    end
+
+    it "includes the Monday and the Sunday and leaves out the days either side" do
+      complete(stretch, monday - 1, monday, monday + 6, monday + 7)
+
+      expect(user.habits.completed_dates_in_week(monday)[stretch.id]).to eq([ "2026-10-26", "2026-11-01" ])
+    end
+
+    it "leaves out habits with no completions that week" do
+      complete(stretch, monday - 7)
+      read
+
+      expect(user.habits.completed_dates_in_week(monday)).to eq({})
+    end
+
+    it "only reads completions of the habits in the relation it is called on" do
+      other = create(:habit)
+      complete(other, monday)
+      complete(stretch, monday)
+
+      expect(user.habits.completed_dates_in_week(monday).keys).to eq([ stretch.id ])
+    end
+
+    it "runs one query, however many habits there are" do
+      complete(stretch, monday)
+      complete(read, monday)
+
+      statements = []
+      callback = lambda do |*, payload|
+        statements << payload[:sql] unless payload[:name] == "SCHEMA" || payload[:cached]
+      end
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        user.habits.order(:created_at, :id).completed_dates_in_week(monday)
+      end
+
+      expect(statements.size).to eq(1)
+    end
+  end
 end

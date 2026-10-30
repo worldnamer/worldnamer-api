@@ -35,7 +35,7 @@ RSpec.describe "/api/v1/habits", type: :request do
     end
 
     it "returns an empty list when there are no habits" do
-      get "/api/v1/habits", headers: bearer(token_for)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token_for)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq("habits" => [])
@@ -46,7 +46,7 @@ RSpec.describe "/api/v1/habits", type: :request do
       oldest = create(:habit, user: user, name: "Oldest", created_at: 3.hours.ago)
       middle = create(:habit, user: user, name: "Middle", created_at: 2.hours.ago)
 
-      get "/api/v1/habits", headers: bearer(token_for)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token_for)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq(
@@ -61,7 +61,7 @@ RSpec.describe "/api/v1/habits", type: :request do
       first = create(:habit, user: user, created_at: time)
       second = create(:habit, user: user, created_at: time)
 
-      get "/api/v1/habits", headers: bearer(token_for)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token_for)
 
       expect(response.parsed_body["habits"].map { |habit| habit["id"] }).to eq([ first.id, second.id ])
     end
@@ -70,7 +70,7 @@ RSpec.describe "/api/v1/habits", type: :request do
       create(:habit, user: create(:user), name: "Not yours")
       mine = create(:habit, user: user, name: "Mine")
 
-      get "/api/v1/habits", headers: bearer(token_for)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token_for)
 
       expect(response.parsed_body["habits"]).to eq([ { "id" => mine.id, "name" => "Mine", "completed_dates" => [] } ])
     end
@@ -104,14 +104,14 @@ RSpec.describe "/api/v1/habits", type: :request do
         statements
       end
 
-      it "gives every habit an empty list when week_start is left out, even if completions exist, and queries no completions" do
+      it "answers 400 when week_start is left out, and reads no completions" do
         habit = create(:habit, user: user, name: "Stretch")
         complete(habit, monday, "2026-10-28")
 
         statements = sql_statements { get "/api/v1/habits", headers: bearer(token) }
 
-        expect(response).to have_http_status(:ok)
-        expect(dates_by_name).to eq("Stretch" => [])
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq("error" => { "code" => "bad_request", "message" => "week_start is required." })
         expect(statements.grep(/habit_completions/)).to be_empty
       end
 
@@ -240,6 +240,12 @@ RSpec.describe "/api/v1/habits", type: :request do
 
         expect_unauthenticated
       end
+
+      it "answers 401 before it notices week_start is missing" do
+        get "/api/v1/habits"
+
+        expect_unauthenticated
+      end
     end
   end
 
@@ -278,7 +284,7 @@ RSpec.describe "/api/v1/habits", type: :request do
       token = token_for
 
       post_habit({ habit: { name: "Stretch" } }, token: token)
-      get "/api/v1/habits", headers: bearer(token)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token)
 
       expect(response.parsed_body["habits"].map { |habit| habit["name"] }).to eq([ "Older", "Stretch" ])
     end
@@ -395,7 +401,7 @@ RSpec.describe "/api/v1/habits", type: :request do
 
       expect(response).to have_http_status(:no_content)
       expect(response.body).to be_empty
-      get "/api/v1/habits", headers: bearer(token)
+      get "/api/v1/habits", params: { week_start: "2026-10-26" }, headers: bearer(token)
       expect(response.parsed_body["habits"]).to eq([ { "id" => keep.id, "name" => "Keep", "completed_dates" => [] } ])
     end
 

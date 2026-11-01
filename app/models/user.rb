@@ -16,6 +16,8 @@ class User < ApplicationRecord
 
   # At most one Google Calendar link. No callbacks on it; the foreign key cascades in the database as well.
   has_one :google_calendar_connection, dependent: :delete
+  # At most one Google sign-in in progress. Same reasoning.
+  has_one :google_oauth_state, dependent: :delete
 
   # Devise lowercases and strips :username (case_insensitive_keys / strip_whitespace_keys in config/initializers/devise.rb)
   # before validation, so a plain uniqueness check is case-insensitive.

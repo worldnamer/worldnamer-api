@@ -22,7 +22,7 @@ RSpec.describe "/api/v1/habits/:habit_id/completions/:date", type: :request do
 
   def expect_not_found
     expect(response).to have_http_status(:not_found)
-    expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Habit not found." })
+    expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Not found." })
   end
 
   def expect_bad_date

@@ -49,6 +49,14 @@ module Api
         end
       end
 
+      # DELETE /api/v1/task_lists/:task_list_id/tasks/:id. The task is found through the list that was found through the
+      # caller, so a task in someone else's list, in another of the caller's lists, or already gone all get the same
+      # 404. The request body is never read.
+      def destroy
+        @task_list.tasks.find(params[:id]).destroy!
+        head :no_content
+      end
+
       private
 
       # Scoped to the caller's lists, so a missing, foreign, non-numeric or out-of-range id all raise RecordNotFound (404).

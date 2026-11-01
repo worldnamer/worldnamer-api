@@ -509,4 +509,108 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(dumped).not_to include(text)
     end
   end
+
+  describe "DELETE /api/v1/task_lists/:task_list_id/tasks/:id" do
+    let!(:task) { create(:task, task_list: list, text: "Milk") }
+
+    def delete_task(list_id, id, token: token_for, **options)
+      delete "/api/v1/task_lists/#{list_id}/tasks/#{id}", headers: bearer(token), **options
+    end
+
+    it "returns 401 unauthenticated with no token, a malformed token or an expired token, and deletes nothing" do
+      path = "/api/v1/task_lists/#{list.id}/tasks/#{task.id}"
+      token = token_for
+
+      expect {
+        delete path
+        expect_unauthenticated
+
+        delete path, headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+
+        travel 16.minutes do
+          delete path, headers: bearer(token)
+        end
+        expect_unauthenticated
+      }.not_to change(Task, :count)
+    end
+
+    it "returns 401, not 404, for a task that does not exist when there is no token" do
+      delete "/api/v1/task_lists/#{list.id}/tasks/999999"
+
+      expect_unauthenticated
+    end
+
+    it "deletes the task with 204 and no body, and it is gone from GET" do
+      token = token_for
+
+      delete_task(list.id, task.id, token: token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+      expect(response.parsed_body).to eq("tasks" => [])
+    end
+
+    it "keeps the other tasks in the list and the tasks of other lists" do
+      sibling = create(:task, task_list: list, text: "Sibling")
+      elsewhere = create(:task, task_list: create(:task_list, user: user), text: "Elsewhere")
+
+      delete_task(list.id, task.id)
+
+      expect(response).to have_http_status(:no_content)
+      expect(Task.all).to contain_exactly(sibling, elsewhere)
+    end
+
+    it "returns 404 on a second delete of the same task" do
+      token = token_for
+
+      delete_task(list.id, task.id, token: token)
+      expect(response).to have_http_status(:no_content)
+
+      delete_task(list.id, task.id, token: token)
+      expect_not_found
+    end
+
+    it "returns the same 404 body, and deletes nothing, for every task the caller cannot reach" do
+      theirs_list = create(:task_list, user: create(:user))
+      theirs = create(:task, task_list: theirs_list, text: "Theirs")
+      my_other_list = create(:task_list, user: user)
+      in_other = create(:task, task_list: my_other_list, text: "Other list")
+      token = token_for
+
+      expect {
+        [
+          [ theirs_list.id, theirs.id ],             # another user's list
+          [ list.id, in_other.id ],                  # the caller's own list, a task from another of their lists
+          [ list.id, theirs.id ],                    # another user's task through the caller's list
+          [ list.id, theirs.id + 1000 ],             # missing task
+          [ list.id, "abc" ],                        # non-numeric task id
+          [ list.id, "-1" ],                         # negative task id
+          [ list.id, "99999999999999999999999999" ], # out-of-range task id
+          [ theirs_list.id + 1000, task.id ],        # missing list
+          [ "abc", task.id ]                         # non-numeric list id
+        ].each do |list_id, id|
+          delete_task(list_id, id, token: token)
+          expect_not_found
+        end
+      }.not_to change(Task, :count)
+    end
+
+    it "returns 404 when the list is deleted elsewhere" do
+      token = token_for
+      TaskList.where(id: list.id).destroy_all
+
+      delete_task(list.id, task.id, token: token)
+
+      expect_not_found
+    end
+
+    it "ignores a request body" do
+      delete_task(list.id, task.id, params: { task: { text: "Ignored" } }, as: :json)
+
+      expect(response).to have_http_status(:no_content)
+      expect(Task.exists?(task.id)).to be(false)
+    end
+  end
 end

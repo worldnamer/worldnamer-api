@@ -90,4 +90,90 @@ RSpec.describe GoogleCalendarConnection, type: :model do
       expect(build(:google_calendar_connection, :lost).status).to eq("lost")
     end
   end
+
+  describe "#mark_lost!" do
+    it "clears the token and sets lost_at" do
+      record = create(:google_calendar_connection)
+
+      expect(record.mark_lost!).to be(true)
+      stored = GoogleCalendarConnection.find(record.id)
+      expect(stored.refresh_token).to be_nil
+      expect(stored.lost_at).to be_within(5.seconds).of(Time.current)
+      expect(stored.status).to eq("lost")
+    end
+
+    it "leaves alone a connection that was reconnected after this copy was loaded" do
+      record = create(:google_calendar_connection, connected_at: 1.hour.ago)
+      stale_copy = GoogleCalendarConnection.find(record.id)
+      # A reconnect in another request: new token, new connected_at.
+      record.update!(refresh_token: "1//after-reconnect", connected_at: Time.current, lost_at: nil)
+
+      expect(stale_copy.mark_lost!).to be(false)
+      stored = GoogleCalendarConnection.find(record.id)
+      expect(stored.refresh_token).to eq("1//after-reconnect")
+      expect(stored.lost_at).to be_nil
+    end
+  end
+
+  describe "#check" do
+    let(:client) { GoogleCalendar::OauthClient.new }
+
+    it "is connected when Google accepts the token, and changes nothing" do
+      record = create(:google_calendar_connection, refresh_token: "1//stored")
+      stub_google_tokens(grant_type: "refresh_token")
+
+      expect { expect(record.check(client: client)).to eq("connected") }
+        .not_to change { GoogleCalendarConnection.find(record.id).attributes }
+    end
+
+    it "stores a new refresh token when Google sends one, encrypted" do
+      record = create(:google_calendar_connection, refresh_token: "1//stored")
+      stub_google_tokens(refresh_token: "1//rotated")
+
+      expect(record.check(client: client)).to eq("connected")
+      expect(GoogleCalendarConnection.find(record.id).refresh_token).to eq("1//rotated")
+      expect(stored_refresh_token_ciphertext(record)).not_to include("1//rotated")
+    end
+
+    it "does not let a rotated token overwrite a connection reconnected during the check" do
+      record = create(:google_calendar_connection, refresh_token: "1//stored", connected_at: 1.hour.ago)
+      stub_request(:post, google_token_endpoint).to_return do
+        GoogleCalendarConnection.where(id: record.id).update_all(refresh_token: nil, connected_at: Time.current)
+        GoogleCalendarConnection.find(record.id).update!(refresh_token: "1//after-reconnect")
+        { status: 200, body: { access_token: "ya29.x", refresh_token: "1//old-grant" }.to_json }
+      end
+
+      record.check(client: client)
+
+      expect(GoogleCalendarConnection.find(record.id).refresh_token).to eq("1//after-reconnect")
+    end
+
+    it "marks the connection lost on invalid_grant" do
+      record = create(:google_calendar_connection)
+      stub_google_token_error("invalid_grant")
+
+      expect(record.check(client: client)).to eq("lost")
+      expect(GoogleCalendarConnection.find(record.id).lost_at).to be_present
+    end
+
+    it "is connected, and the new connection kept, when the user reconnects while invalid_grant is on its way" do
+      record = create(:google_calendar_connection, connected_at: 1.hour.ago)
+      stub_request(:post, google_token_endpoint).to_return do
+        GoogleCalendarConnection.find(record.id).update!(refresh_token: "1//after-reconnect", connected_at: Time.current)
+        { status: 400, body: { error: "invalid_grant" }.to_json }
+      end
+
+      expect(record.check(client: client)).to eq("connected")
+      stored = GoogleCalendarConnection.find(record.id)
+      expect(stored.refresh_token).to eq("1//after-reconnect")
+      expect(stored.lost_at).to be_nil
+    end
+
+    it "does not call Google for a lost connection" do
+      record = create(:google_calendar_connection, :lost)
+
+      expect(record.check(client: client)).to eq("lost")
+      expect(a_request(:any, google_token_endpoint)).not_to have_been_made
+    end
+  end
 end

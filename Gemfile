@@ -52,6 +52,11 @@ group :development, :test do
   gem "dotenv-rails", "~> 3.2" # loads .env.development.local (gitignored) for local-only keys
 end
 
+group :test do
+  # Stubs outgoing HTTP (Google's OAuth endpoints) in specs and refuses any request that is not stubbed
+  gem "webmock"
+end
+
 # Traces to Honeycomb over OpenTelemetry (see config/initializers/opentelemetry.rb)
 gem "opentelemetry-sdk", "~> 1.13"
 gem "opentelemetry-exporter-otlp", "~> 0.37.0"

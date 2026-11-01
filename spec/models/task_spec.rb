@@ -6,7 +6,7 @@ RSpec.describe Task, type: :model do
 
   describe "table tasks" do
     it "has the expected columns" do
-      expect(columns.keys).to include("task_list_id", "text", "done", "created_at", "updated_at")
+      expect(columns.keys).to include("task_list_id", "text", "done", "due_on", "created_at", "updated_at")
     end
 
     it "requires task_list_id, text and done, limits text to 100 characters and defaults done to false" do
@@ -60,6 +60,29 @@ RSpec.describe Task, type: :model do
       list = create(:task_list)
 
       expect { 2.times { create(:task, task_list: list, text: "Milk") } }.to change(Task, :count).by(2)
+    end
+  end
+
+  describe "due_on" do
+    it "is a nullable date with no default and no index" do
+      expect(columns["due_on"].type).to eq(:date)
+      expect(columns["due_on"].null).to be(true)
+      expect(columns["due_on"].default).to be_nil
+      expect(connection.index_exists?(:tasks, :due_on)).to be(false)
+    end
+
+    it "is nil for a new task" do
+      expect(create(:task).reload.due_on).to be_nil
+    end
+
+    it "round-trips a Date unchanged whatever the time zone" do
+      [ "International Date Line West", "Nuku'alofa" ].each do |zone|
+        Time.use_zone(zone) do
+          task = create(:task, due_on: Date.new(2026, 11, 5))
+
+          expect(task.reload.due_on).to eq(Date.new(2026, 11, 5))
+        end
+      end
     end
   end
 

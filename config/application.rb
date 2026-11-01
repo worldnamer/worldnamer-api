@@ -53,5 +53,19 @@ module WorldnamerApi
     # Origin check on the session endpoints (Api::V1::SessionsController).
     # Outside production ALLOWED_ORIGINS can replace the default; production ignores it (config/allowed_origins.rb).
     config.x.allowed_origins = AllowedOrigins.from(ENV, production: Rails.env.production?)
+
+    # Keys for Active Record encryption (encrypts in models, such as Google's refresh token). They come from env vars,
+    # not the master key or credentials.yml.enc. Production fails at boot if either is missing (ENV.fetch), so a deploy
+    # without them never starts. Development and test use the env var if set, otherwise a fixed throwaway value that
+    # must never be used in production. Losing the production keys makes the stored values unreadable.
+    if Rails.env.production?
+      config.active_record.encryption.primary_key = ENV.fetch("ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY")
+      config.active_record.encryption.key_derivation_salt = ENV.fetch("ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT")
+    else
+      config.active_record.encryption.primary_key =
+        ENV.fetch("ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY", "development-and-test-only-throwaway-primary-key")
+      config.active_record.encryption.key_derivation_salt =
+        ENV.fetch("ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT", "development-and-test-only-throwaway-salt")
+    end
   end
 end

@@ -298,4 +298,146 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(dumped).not_to include(text)
     end
   end
+
+  describe "PATCH /api/v1/task_lists/:task_list_id/tasks/:id" do
+    let!(:task) { create(:task, task_list: list, text: "Milk", done: true) }
+
+    def patch_task(list_id, id, body, token: token_for)
+      patch "/api/v1/task_lists/#{list_id}/tasks/#{id}", params: body, as: :json, headers: bearer(token)
+    end
+
+    def expect_error(status, code, message)
+      expect(response).to have_http_status(status)
+      expect(response.parsed_body).to eq("error" => { "code" => code, "message" => message })
+    end
+
+    it "returns 401 unauthenticated with no token or a bad token, and changes nothing" do
+      path = "/api/v1/task_lists/#{list.id}/tasks/#{task.id}"
+
+      patch path, params: { task: { text: "Bread" } }, as: :json
+      expect_unauthenticated
+
+      patch path, params: { task: { text: "Bread" } }, as: :json, headers: bearer("this.is.notajwt")
+      expect_unauthenticated
+
+      expect(task.reload.text).to eq("Milk")
+    end
+
+    it "changes the text, returns 200 with id, text and done, and leaves done alone" do
+      patch_task(list.id, task.id, { task: { text: "Bread" } })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => true })
+      expect(task.reload.text).to eq("Bread")
+      expect(task.done).to be(true)
+    end
+
+    it "is harmless to repeat" do
+      token = token_for
+
+      2.times do
+        patch_task(list.id, task.id, { task: { text: "Bread" } }, token: token)
+        expect(response).to have_http_status(:ok)
+      end
+      expect(task.reload.text).to eq("Bread")
+    end
+
+    it "accepts a blank text, and strips spaces" do
+      patch_task(list.id, task.id, { task: { text: "   " } })
+      expect(response).to have_http_status(:ok)
+      expect(task.reload.text).to eq("")
+
+      patch_task(list.id, task.id, { task: { text: "  Bread  " } })
+      expect(response.parsed_body["task"]["text"]).to eq("Bread")
+    end
+
+    it "does not move the task in the list" do
+      later = create(:task, task_list: list, text: "Later")
+      token = token_for
+
+      patch_task(list.id, task.id, { task: { text: "Edited" } }, token: token)
+      get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+
+      expect(response.parsed_body["tasks"].map { |t| t["id"] }).to eq([ task.id, later.id ])
+    end
+
+    it "refuses 101 characters with 422 and leaves the text unchanged" do
+      patch_task(list.id, task.id, { task: { text: "a" * 101 } })
+
+      expect_error(:unprocessable_content, "validation_failed", "Text is too long (maximum is 100 characters).")
+      expect(task.reload.text).to eq("Milk")
+    end
+
+    it "returns 400 when the task key is missing or empty, and for a non-scalar text" do
+      [ { text: "Bread" }, {}, { task: {} }, { task: "Bread" }, { task: { text: { "a" => "b" } } },
+        { task: { text: [ "Bread" ] } } ].each do |body|
+        patch_task(list.id, task.id, body)
+
+        expect_error(:bad_request, "bad_request", "Request body is malformed.")
+      end
+      expect(task.reload.text).to eq("Milk")
+    end
+
+    it "ignores task_list_id and id in the body, so a task cannot be moved" do
+      other_list = create(:task_list, user: user)
+
+      patch_task(list.id, task.id, { task: { text: "Bread", task_list_id: other_list.id, id: 999_999 } })
+
+      expect(response).to have_http_status(:ok)
+      expect(task.reload.task_list).to eq(list)
+      expect(response.parsed_body["task"]["id"]).to eq(task.id)
+    end
+
+    it "returns the same 404 body, and changes nothing, for every task the caller cannot reach" do
+      theirs_list = create(:task_list, user: create(:user))
+      theirs = create(:task, task_list: theirs_list, text: "Theirs")
+      my_other_list = create(:task_list, user: user)
+      in_other = create(:task, task_list: my_other_list, text: "Other list")
+      token = token_for
+      body = { task: { text: "Hacked" } }
+
+      [
+        [ theirs_list.id, theirs.id ],             # another user's list
+        [ list.id, in_other.id ],                  # the caller's own list, a task from another of their lists
+        [ list.id, theirs.id ],                    # another user's task through the caller's list
+        [ list.id, theirs.id + 1000 ],             # missing task
+        [ list.id, "abc" ],                        # non-numeric task id
+        [ list.id, "99999999999999999999999999" ], # out-of-range task id
+        [ theirs_list.id + 1000, task.id ],        # missing list
+        [ "abc", task.id ]                         # non-numeric list id
+      ].each do |list_id, id|
+        patch_task(list_id, id, body, token: token)
+        expect_not_found
+      end
+      expect(theirs.reload.text).to eq("Theirs")
+      expect(in_other.reload.text).to eq("Other list")
+      expect(task.reload.text).to eq("Milk")
+    end
+
+    it "returns 404, not 400, when a bad body is sent to a task that is not the caller's" do
+      theirs = create(:task, task_list: create(:task_list, user: create(:user)))
+
+      patch_task(theirs.task_list_id, theirs.id, { text: "Hacked" })
+      expect_not_found
+
+      patch_task(list.id, theirs.id, {})
+      expect_not_found
+    end
+
+    it "puts the task text in no span attribute or event" do
+      text = "SENTINEL-task-edit-b2e46a17-do-not-trace"
+      token = token_for
+      TelemetryHelpers.reset
+
+      patch_task(list.id, task.id, { task: { text: text } }, token: token)
+
+      expect(response).to have_http_status(:ok)
+      spans = captured_spans
+      # Non-vacuous: the request and its update were traced.
+      expect(spans).not_to be_empty
+      dumped = spans.map { |span| [ span.name, span.attributes, Array(span.events).map { |e| [ e.name, e.attributes ] } ] }.inspect
+      expect(dumped).to include("/api/v1/task_lists")
+      expect(dumped).not_to include(text)
+    end
+  end
 end

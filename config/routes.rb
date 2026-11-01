@@ -17,7 +17,7 @@ Rails.application.routes.draw do
       get "me", to: "me#show"
       resource :task_list_order, only: :update
       resources :task_lists, only: %i[index create update destroy] do
-        resources :tasks, only: %i[index create]
+        resources :tasks, only: %i[index create update]
       end
       resources :habits, only: %i[index create destroy] do
         # /habits/:habit_id/completions/:date. param: :date names the segment :date instead of :id.

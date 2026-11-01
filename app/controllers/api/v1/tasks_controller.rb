@@ -17,6 +17,21 @@ module Api
         render json: { tasks: @task_list.tasks.in_order.map { |task| task_json(task) } }
       end
 
+      # POST /api/v1/task_lists/:task_list_id/tasks. The list comes from the path (found through the caller) and done
+      # starts false: params.expect permits only text, so task_list_id, id and done in the body are dropped. A blank or
+      # nil text is stored as "".
+      def create
+        task = @task_list.tasks.build(params.expect(task: [ :text ]))
+        if task.save
+          render json: { task: task_json(task) }, status: :created
+        else
+          render_error "validation_failed", "#{task.errors.full_messages.first}.", :unprocessable_content
+        end
+      rescue ActiveRecord::InvalidForeignKey
+        # The list was deleted (another tab) between the lookup and the insert: the same 404 as a missing list.
+        render_error "not_found", "Not found.", :not_found
+      end
+
       private
 
       # Scoped to the caller's lists, so a missing, foreign, non-numeric or out-of-range id all raise RecordNotFound (404).

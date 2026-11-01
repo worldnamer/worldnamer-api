@@ -64,7 +64,7 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(response.parsed_body).to eq("tasks" => [])
     end
 
-    it "returns the tasks oldest first, each with only id, text and done" do
+    it "returns the tasks oldest first, each with only id, text, done and due_on" do
       first = create(:task, task_list: list, text: "First", done: true)
       second = create(:task, task_list: list, text: "Second")
       third = create(:task, task_list: list, text: "")
@@ -74,11 +74,19 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq(
         "tasks" => [
-          { "id" => first.id, "text" => "First", "done" => true },
-          { "id" => second.id, "text" => "Second", "done" => false },
-          { "id" => third.id, "text" => "", "done" => false }
+          { "id" => first.id, "text" => "First", "done" => true, "due_on" => nil },
+          { "id" => second.id, "text" => "Second", "done" => false, "due_on" => nil },
+          { "id" => third.id, "text" => "", "done" => false, "due_on" => nil }
         ]
       )
+    end
+
+    it "returns due_on as YYYY-MM-DD when it is set" do
+      task = create(:task, task_list: list, due_on: Date.new(2026, 11, 5))
+
+      get_tasks(list.id)
+
+      expect(response.parsed_body["tasks"]).to eq([ { "id" => task.id, "text" => task.text, "done" => false, "due_on" => "2026-11-05" } ])
     end
 
     it "never includes the tasks of another of the caller's lists" do
@@ -119,12 +127,12 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       }.not_to change(Task, :count)
     end
 
-    it "creates the task in the list and returns 201 with its id, text and done false" do
+    it "creates the task in the list and returns 201 with its id, text, done false and due_on null" do
       post_task(list.id, { task: { text: "Milk" } })
 
       task = Task.last
       expect(response).to have_http_status(:created)
-      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => false })
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => false, "due_on" => nil })
       expect(task.task_list).to eq(list)
     end
 
@@ -149,6 +157,14 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
         end
       }.to change(Task, :count).by(3)
       expect(Task.pluck(:text)).to all(eq(""))
+    end
+
+    it "ignores due_on in the body and creates the task without a date" do
+      post_task(list.id, { task: { text: "Milk", due_on: "2026-11-05" } })
+
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body["task"]["due_on"]).to be_nil
+      expect(Task.last.due_on).to be_nil
     end
 
     it "strips spaces at the start and end of the text" do
@@ -198,7 +214,7 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(task.done).to be(false)
       expect(task.task_list).to eq(list)
       expect(task.id).not_to eq(999_999)
-      expect(response.parsed_body["task"]).to eq("id" => task.id, "text" => "Milk", "done" => false)
+      expect(response.parsed_body["task"]).to eq("id" => task.id, "text" => "Milk", "done" => false, "due_on" => nil)
     end
 
     # params.expect(task: [ :text ]) permits scalars only. A hash or an array in text is dropped, which leaves nothing
@@ -323,11 +339,11 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(task.reload.text).to eq("Milk")
     end
 
-    it "changes the text, returns 200 with id, text and done, and leaves done alone" do
+    it "changes the text, returns 200 with id, text, done and due_on, and leaves done alone" do
       patch_task(list.id, task.id, { task: { text: "Bread" } })
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => true })
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => true, "due_on" => nil })
       expect(task.reload.text).to eq("Bread")
       expect(task.done).to be(true)
     end
@@ -367,11 +383,11 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
 
       patch_task(list.id, task.id, { task: { done: true } }, token: token)
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => true })
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => true, "due_on" => nil })
       expect(task.reload.done).to be(true)
 
       patch_task(list.id, task.id, { task: { done: false } }, token: token)
-      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => false })
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => false, "due_on" => nil })
       expect(task.reload.done).to be(false)
       expect(task.text).to eq("Milk")
     end
@@ -381,7 +397,7 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
 
       patch_task(list.id, task.id, { task: { text: "Bread", done: true } })
 
-      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => true })
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => true, "due_on" => nil })
       expect(task.reload.done).to be(true)
     end
 
@@ -493,6 +509,139 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect_not_found
     end
 
+    describe "due_on" do
+      let(:message) { "due_on must be a date in the form YYYY-MM-DD, or null." }
+
+      it "sets the date, returns it, and GET shows it" do
+        token = token_for
+
+        patch_task(list.id, task.id, { task: { due_on: "2026-11-05" } }, token: token)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => true, "due_on" => "2026-11-05" })
+        expect(task.reload.due_on).to eq(Date.new(2026, 11, 5))
+        get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+        expect(response.parsed_body["tasks"].first["due_on"]).to eq("2026-11-05")
+      end
+
+      it "clears the date with null" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+
+        patch_task(list.id, task.id, { task: { due_on: nil } })
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["task"]["due_on"]).to be_nil
+        expect(task.reload.due_on).to be_nil
+      end
+
+      # params.expect(task: [ :due_on ]) keeps a key whose value is null, so a body of only due_on: null is a valid
+      # request and not "malformed". Pinned so a Rails change of behavior shows up in review.
+      it "treats a task body of only due_on null as a valid clear, not as malformed" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+
+        patch_task(list.id, task.id, { task: { due_on: nil } })
+
+        expect(response).to have_http_status(:ok)
+        expect(task.reload.due_on).to be_nil
+        expect(task.text).to eq("Milk")
+      end
+
+      it "leaves the date alone when due_on is absent" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+        token = token_for
+
+        patch_task(list.id, task.id, { task: { text: "Bread" } }, token: token)
+        expect(response.parsed_body["task"]["due_on"]).to eq("2026-11-05")
+
+        patch_task(list.id, task.id, { task: { done: false } }, token: token)
+        expect(response.parsed_body["task"]["due_on"]).to eq("2026-11-05")
+        expect(task.reload.due_on).to eq(Date.new(2026, 11, 5))
+      end
+
+      it "leaves the text and done alone when only due_on is sent" do
+        patch_task(list.id, task.id, { task: { due_on: "2026-11-05" } })
+
+        expect(task.reload.text).to eq("Milk")
+        expect(task.done).to be(true)
+      end
+
+      it "changes text, done and due_on together" do
+        patch_task(list.id, task.id, { task: { text: "Bread", done: false, due_on: "2026-11-05" } })
+
+        expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => false, "due_on" => "2026-11-05" })
+      end
+
+      it "is harmless to repeat" do
+        token = token_for
+
+        2.times do
+          patch_task(list.id, task.id, { task: { due_on: "2026-11-05" } }, token: token)
+          expect(response).to have_http_status(:ok)
+        end
+        2.times do
+          patch_task(list.id, task.id, { task: { due_on: nil } }, token: token)
+          expect(response).to have_http_status(:ok)
+        end
+        expect(task.reload.due_on).to be_nil
+      end
+
+      it "accepts a leap day and the ends of the range, and refuses what is outside them" do
+        token = token_for
+
+        [ "2028-02-29", "1900-01-01", "9999-12-31" ].each do |date|
+          patch_task(list.id, task.id, { task: { due_on: date } }, token: token)
+          expect(response).to have_http_status(:ok)
+          expect(task.reload.due_on).to eq(Date.iso8601(date))
+        end
+
+        task.update!(due_on: nil)
+        [ "2027-02-29", "1899-12-31" ].each do |date|
+          patch_task(list.id, task.id, { task: { due_on: date } }, token: token)
+          expect_error(:bad_request, "bad_request", message)
+        end
+        expect(task.reload.due_on).to be_nil
+      end
+
+      it "returns 400 with the exact message and changes nothing for anything that is not YYYY-MM-DD or null" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+        token = token_for
+
+        [ 20_261_105, 0, true, "", "2026-2-5", "20261105", "2026-02-30", "2026-11-05T23:00Z", "2026-11-05T00:00:00",
+          " 2026-11-05", "2026-11-05 ", "2026-11-05\n", "Nov 5", "garbage", [ "2026-11-05" ], [], { "a" => "2026-11-05" }, {} ].each do |due_on|
+          patch_task(list.id, task.id, { task: { due_on: due_on } }, token: token)
+          expect_error(:bad_request, "bad_request", message)
+
+          # With a valid text beside it, a bad due_on still refuses the whole request.
+          patch_task(list.id, task.id, { task: { text: "Bread", due_on: due_on } }, token: token)
+          expect(response).to have_http_status(:bad_request)
+        end
+        task.reload
+        expect(task.due_on).to eq(Date.new(2026, 11, 5))
+        expect(task.text).to eq("Milk")
+      end
+
+      it "checks done before due_on" do
+        patch_task(list.id, task.id, { task: { done: "yes", due_on: "garbage" } })
+
+        expect_error(:bad_request, "bad_request", "done must be true or false.")
+      end
+
+      it "returns 404, not 400, for a bad due_on sent to a task that is not the caller's" do
+        theirs = create(:task, task_list: create(:task_list, user: create(:user)))
+
+        patch_task(list.id, theirs.id, { task: { due_on: "garbage" } })
+
+        expect_not_found
+      end
+
+      it "returns 401 unauthenticated and sets nothing without a token" do
+        patch "/api/v1/task_lists/#{list.id}/tasks/#{task.id}", params: { task: { due_on: "2026-11-05" } }, as: :json
+
+        expect_unauthenticated
+        expect(task.reload.due_on).to be_nil
+      end
+    end
+
     it "puts the task text in no span attribute or event" do
       text = "SENTINEL-task-edit-b2e46a17-do-not-trace"
       token = token_for
@@ -507,6 +656,110 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       dumped = spans.map { |span| [ span.name, span.attributes, Array(span.events).map { |e| [ e.name, e.attributes ] } ] }.inspect
       expect(dumped).to include("/api/v1/task_lists")
       expect(dumped).not_to include(text)
+    end
+  end
+
+  describe "DELETE /api/v1/task_lists/:task_list_id/tasks/:id" do
+    let!(:task) { create(:task, task_list: list, text: "Milk") }
+
+    def delete_task(list_id, id, token: token_for, **options)
+      delete "/api/v1/task_lists/#{list_id}/tasks/#{id}", headers: bearer(token), **options
+    end
+
+    it "returns 401 unauthenticated with no token, a malformed token or an expired token, and deletes nothing" do
+      path = "/api/v1/task_lists/#{list.id}/tasks/#{task.id}"
+      token = token_for
+
+      expect {
+        delete path
+        expect_unauthenticated
+
+        delete path, headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+
+        travel 16.minutes do
+          delete path, headers: bearer(token)
+        end
+        expect_unauthenticated
+      }.not_to change(Task, :count)
+    end
+
+    it "returns 401, not 404, for a task that does not exist when there is no token" do
+      delete "/api/v1/task_lists/#{list.id}/tasks/999999"
+
+      expect_unauthenticated
+    end
+
+    it "deletes the task with 204 and no body, and it is gone from GET" do
+      token = token_for
+
+      delete_task(list.id, task.id, token: token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+      expect(response.parsed_body).to eq("tasks" => [])
+    end
+
+    it "keeps the other tasks in the list and the tasks of other lists" do
+      sibling = create(:task, task_list: list, text: "Sibling")
+      elsewhere = create(:task, task_list: create(:task_list, user: user), text: "Elsewhere")
+
+      delete_task(list.id, task.id)
+
+      expect(response).to have_http_status(:no_content)
+      expect(Task.all).to contain_exactly(sibling, elsewhere)
+    end
+
+    it "returns 404 on a second delete of the same task" do
+      token = token_for
+
+      delete_task(list.id, task.id, token: token)
+      expect(response).to have_http_status(:no_content)
+
+      delete_task(list.id, task.id, token: token)
+      expect_not_found
+    end
+
+    it "returns the same 404 body, and deletes nothing, for every task the caller cannot reach" do
+      theirs_list = create(:task_list, user: create(:user))
+      theirs = create(:task, task_list: theirs_list, text: "Theirs")
+      my_other_list = create(:task_list, user: user)
+      in_other = create(:task, task_list: my_other_list, text: "Other list")
+      token = token_for
+
+      expect {
+        [
+          [ theirs_list.id, theirs.id ],             # another user's list
+          [ list.id, in_other.id ],                  # the caller's own list, a task from another of their lists
+          [ list.id, theirs.id ],                    # another user's task through the caller's list
+          [ list.id, theirs.id + 1000 ],             # missing task
+          [ list.id, "abc" ],                        # non-numeric task id
+          [ list.id, "-1" ],                         # negative task id
+          [ list.id, "99999999999999999999999999" ], # out-of-range task id
+          [ theirs_list.id + 1000, task.id ],        # missing list
+          [ "abc", task.id ]                         # non-numeric list id
+        ].each do |list_id, id|
+          delete_task(list_id, id, token: token)
+          expect_not_found
+        end
+      }.not_to change(Task, :count)
+    end
+
+    it "returns 404 when the list is deleted elsewhere" do
+      token = token_for
+      TaskList.where(id: list.id).destroy_all
+
+      delete_task(list.id, task.id, token: token)
+
+      expect_not_found
+    end
+
+    it "ignores a request body" do
+      delete_task(list.id, task.id, params: { task: { text: "Ignored" } }, as: :json)
+
+      expect(response).to have_http_status(:no_content)
+      expect(Task.exists?(task.id)).to be(false)
     end
   end
 end

@@ -361,6 +361,75 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(response.parsed_body["tasks"].map { |t| t["id"] }).to eq([ task.id, later.id ])
     end
 
+    it "checks and unchecks a task with done alone, leaving the text" do
+      task.update!(done: false)
+      token = token_for
+
+      patch_task(list.id, task.id, { task: { done: true } }, token: token)
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => true })
+      expect(task.reload.done).to be(true)
+
+      patch_task(list.id, task.id, { task: { done: false } }, token: token)
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => false })
+      expect(task.reload.done).to be(false)
+      expect(task.text).to eq("Milk")
+    end
+
+    it "changes text and done together" do
+      task.update!(done: false)
+
+      patch_task(list.id, task.id, { task: { text: "Bread", done: true } })
+
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => true })
+      expect(task.reload.done).to be(true)
+    end
+
+    it "is harmless to repeat a check" do
+      task.update!(done: false)
+      token = token_for
+
+      2.times do
+        patch_task(list.id, task.id, { task: { done: true } }, token: token)
+        expect(response).to have_http_status(:ok)
+      end
+      expect(task.reload.done).to be(true)
+    end
+
+    it "does not move a task when it is checked" do
+      later = create(:task, task_list: list, text: "Later")
+      token = token_for
+
+      patch_task(list.id, task.id, { task: { done: false } }, token: token)
+      get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+
+      expect(response.parsed_body["tasks"].map { |t| t["id"] }).to eq([ task.id, later.id ])
+    end
+
+    it "returns 400 and changes nothing when done is not a JSON boolean" do
+      token = token_for
+
+      [ "yes", "true", "false", "", 1, 0, nil, [ true ], { "a" => true } ].each do |done|
+        patch_task(list.id, task.id, { task: { done: done } }, token: token)
+        expect_error(:bad_request, "bad_request", "done must be true or false.")
+
+        # With a valid text beside it, a bad done still refuses the whole request.
+        patch_task(list.id, task.id, { task: { text: "Bread", done: done } }, token: token)
+        expect(response).to have_http_status(:bad_request)
+      end
+      task.reload
+      expect(task.done).to be(true)
+      expect(task.text).to eq("Milk")
+    end
+
+    it "returns 404 for a task that is not the caller's even when done is not a boolean" do
+      theirs = create(:task, task_list: create(:task_list, user: create(:user)))
+
+      patch_task(list.id, theirs.id, { task: { done: "yes" } })
+
+      expect_not_found
+    end
+
     it "refuses 101 characters with 422 and leaves the text unchanged" do
       patch_task(list.id, task.id, { task: { text: "a" * 101 } })
 

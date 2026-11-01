@@ -20,7 +20,14 @@ module WorldnamerTelemetry
     # SQL text is recorded with literals replaced by "?", never the values.
     "OpenTelemetry::Instrumentation::PG" => { db_statement: :obfuscate },
     # Record no request or response headers (Authorization, Cookie).
-    "OpenTelemetry::Instrumentation::Rack" => { allowed_request_headers: [], allowed_response_headers: [] }
+    # The Rack span records the raw query string (url.query), and Google's OAuth callback carries the one-time code
+    # and the state there, so that path is not traced at all; its database and outgoing HTTP spans are skipped with it.
+    # The match is on the exact path.
+    "OpenTelemetry::Instrumentation::Rack" => {
+      allowed_request_headers: [],
+      allowed_response_headers: [],
+      untraced_endpoints: [ "/api/v1/google_calendar_connection/callback" ]
+    }
   }.freeze
 
   def self.configure_opentelemetry(span_processor)

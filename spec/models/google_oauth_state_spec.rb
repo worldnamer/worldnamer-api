@@ -65,6 +65,45 @@ RSpec.describe GoogleOauthState, type: :model do
     end
   end
 
+  describe ".claim" do
+    let(:user) { create(:user) }
+
+    it "returns the row once and deletes it, so a second claim gets nothing" do
+      raw_state, row = GoogleOauthState.start!(user)
+
+      expect(GoogleOauthState.claim(raw_state)).to eq(row)
+      expect(GoogleOauthState.exists?(row.id)).to be(false)
+      expect(GoogleOauthState.claim(raw_state)).to be_nil
+    end
+
+    it "returns nil for a blank or unknown state" do
+      GoogleOauthState.start!(user)
+
+      expect(GoogleOauthState.claim(nil)).to be_nil
+      expect(GoogleOauthState.claim("")).to be_nil
+      expect(GoogleOauthState.claim("unknown")).to be_nil
+      expect(GoogleOauthState.count).to eq(1)
+    end
+
+    it "deletes an expired row but returns nil for it" do
+      row = create(:google_oauth_state, state: "old-state", expires_at: 1.second.ago)
+
+      expect(GoogleOauthState.claim("old-state")).to be_nil
+      expect(GoogleOauthState.exists?(row.id)).to be(false)
+    end
+
+    it "returns nil to the loser when another request deleted the row after it was found" do
+      raw_state, row = GoogleOauthState.start!(user)
+      allow(GoogleOauthState).to receive(:find_by).and_wrap_original do |original, *args|
+        found = original.call(*args)
+        GoogleOauthState.where(id: row.id).delete_all # the other request wins the race here
+        found
+      end
+
+      expect(GoogleOauthState.claim(raw_state)).to be_nil
+    end
+  end
+
   describe "#code_challenge" do
     it "is the S256 challenge: unpadded base64url of the verifier's SHA-256" do
       # Expected value computed outside Ruby:

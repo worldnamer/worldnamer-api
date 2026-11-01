@@ -31,6 +31,18 @@ class GoogleOauthState < ApplicationRecord
       )
       [ raw_state, find_by!(user_id: user.id) ]
     end
+
+    # Uses up the sign-in for a raw state from the callback and returns its row, or nil if the state is blank,
+    # unknown, already used or expired. The row is deleted in ONE statement, DELETE ... WHERE id = ?, and only the
+    # request that deleted it gets the row back, so of two callbacks with the same state at most one succeeds.
+    def claim(raw_state)
+      return nil if raw_state.blank?
+
+      row = find_by(state_digest: digest(raw_state))
+      return nil unless row && where(id: row.id).delete_all == 1
+
+      row.expired? ? nil : row
+    end
   end
 
   # The PKCE S256 challenge: base64url of the verifier's SHA-256, without padding.

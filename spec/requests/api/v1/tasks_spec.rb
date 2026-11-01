@@ -509,6 +509,139 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect_not_found
     end
 
+    describe "due_on" do
+      let(:message) { "due_on must be a date in the form YYYY-MM-DD, or null." }
+
+      it "sets the date, returns it, and GET shows it" do
+        token = token_for
+
+        patch_task(list.id, task.id, { task: { due_on: "2026-11-05" } }, token: token)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => true, "due_on" => "2026-11-05" })
+        expect(task.reload.due_on).to eq(Date.new(2026, 11, 5))
+        get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+        expect(response.parsed_body["tasks"].first["due_on"]).to eq("2026-11-05")
+      end
+
+      it "clears the date with null" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+
+        patch_task(list.id, task.id, { task: { due_on: nil } })
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["task"]["due_on"]).to be_nil
+        expect(task.reload.due_on).to be_nil
+      end
+
+      # params.expect(task: [ :due_on ]) keeps a key whose value is null, so a body of only due_on: null is a valid
+      # request and not "malformed". Pinned so a Rails change of behavior shows up in review.
+      it "treats a task body of only due_on null as a valid clear, not as malformed" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+
+        patch_task(list.id, task.id, { task: { due_on: nil } })
+
+        expect(response).to have_http_status(:ok)
+        expect(task.reload.due_on).to be_nil
+        expect(task.text).to eq("Milk")
+      end
+
+      it "leaves the date alone when due_on is absent" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+        token = token_for
+
+        patch_task(list.id, task.id, { task: { text: "Bread" } }, token: token)
+        expect(response.parsed_body["task"]["due_on"]).to eq("2026-11-05")
+
+        patch_task(list.id, task.id, { task: { done: false } }, token: token)
+        expect(response.parsed_body["task"]["due_on"]).to eq("2026-11-05")
+        expect(task.reload.due_on).to eq(Date.new(2026, 11, 5))
+      end
+
+      it "leaves the text and done alone when only due_on is sent" do
+        patch_task(list.id, task.id, { task: { due_on: "2026-11-05" } })
+
+        expect(task.reload.text).to eq("Milk")
+        expect(task.done).to be(true)
+      end
+
+      it "changes text, done and due_on together" do
+        patch_task(list.id, task.id, { task: { text: "Bread", done: false, due_on: "2026-11-05" } })
+
+        expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Bread", "done" => false, "due_on" => "2026-11-05" })
+      end
+
+      it "is harmless to repeat" do
+        token = token_for
+
+        2.times do
+          patch_task(list.id, task.id, { task: { due_on: "2026-11-05" } }, token: token)
+          expect(response).to have_http_status(:ok)
+        end
+        2.times do
+          patch_task(list.id, task.id, { task: { due_on: nil } }, token: token)
+          expect(response).to have_http_status(:ok)
+        end
+        expect(task.reload.due_on).to be_nil
+      end
+
+      it "accepts a leap day and the ends of the range, and refuses what is outside them" do
+        token = token_for
+
+        [ "2028-02-29", "1900-01-01", "9999-12-31" ].each do |date|
+          patch_task(list.id, task.id, { task: { due_on: date } }, token: token)
+          expect(response).to have_http_status(:ok)
+          expect(task.reload.due_on).to eq(Date.iso8601(date))
+        end
+
+        task.update!(due_on: nil)
+        [ "2027-02-29", "1899-12-31" ].each do |date|
+          patch_task(list.id, task.id, { task: { due_on: date } }, token: token)
+          expect_error(:bad_request, "bad_request", message)
+        end
+        expect(task.reload.due_on).to be_nil
+      end
+
+      it "returns 400 with the exact message and changes nothing for anything that is not YYYY-MM-DD or null" do
+        task.update!(due_on: Date.new(2026, 11, 5))
+        token = token_for
+
+        [ 20_261_105, 0, true, "", "2026-2-5", "20261105", "2026-02-30", "2026-11-05T23:00Z", "2026-11-05T00:00:00",
+          " 2026-11-05", "2026-11-05 ", "2026-11-05\n", "Nov 5", "garbage", [ "2026-11-05" ], [], { "a" => "2026-11-05" }, {} ].each do |due_on|
+          patch_task(list.id, task.id, { task: { due_on: due_on } }, token: token)
+          expect_error(:bad_request, "bad_request", message)
+
+          # With a valid text beside it, a bad due_on still refuses the whole request.
+          patch_task(list.id, task.id, { task: { text: "Bread", due_on: due_on } }, token: token)
+          expect(response).to have_http_status(:bad_request)
+        end
+        task.reload
+        expect(task.due_on).to eq(Date.new(2026, 11, 5))
+        expect(task.text).to eq("Milk")
+      end
+
+      it "checks done before due_on" do
+        patch_task(list.id, task.id, { task: { done: "yes", due_on: "garbage" } })
+
+        expect_error(:bad_request, "bad_request", "done must be true or false.")
+      end
+
+      it "returns 404, not 400, for a bad due_on sent to a task that is not the caller's" do
+        theirs = create(:task, task_list: create(:task_list, user: create(:user)))
+
+        patch_task(list.id, theirs.id, { task: { due_on: "garbage" } })
+
+        expect_not_found
+      end
+
+      it "returns 401 unauthenticated and sets nothing without a token" do
+        patch "/api/v1/task_lists/#{list.id}/tasks/#{task.id}", params: { task: { due_on: "2026-11-05" } }, as: :json
+
+        expect_unauthenticated
+        expect(task.reload.due_on).to be_nil
+      end
+    end
+
     it "puts the task text in no span attribute or event" do
       text = "SENTINEL-task-edit-b2e46a17-do-not-trace"
       token = token_for

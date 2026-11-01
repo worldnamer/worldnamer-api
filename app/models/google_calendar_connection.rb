@@ -10,6 +10,13 @@ class GoogleCalendarConnection < ApplicationRecord
   # searched, and nothing needs to search it.
   encrypts :refresh_token
 
+  # Stores a fresh connection for the user, replacing any earlier one (connected or lost) in one upsert on user_id.
+  # The new connected_at is what lets a status check still in flight on the old token see that it must not mark this
+  # one lost.
+  def self.connect!(user_id:, refresh_token:)
+    upsert({ user_id: user_id, refresh_token: refresh_token, connected_at: Time.current, lost_at: nil }, unique_by: :user_id)
+  end
+
   def status
     lost_at ? "lost" : "connected"
   end

@@ -16,6 +16,13 @@ Rails.application.routes.draw do
       delete "session", to: "sessions#destroy"
       get "me", to: "me#show"
       resource :task_list_order, only: :update
+      # Singular: each user has at most one. GoogleCalendarConnectionsController#show.
+      resource :google_calendar_connection, only: :show do
+        # GoogleCalendarConnections::AuthorizationsController#create
+        resource :authorization, only: :create, module: :google_calendar_connections
+        # GoogleCalendarConnections::CallbacksController#show. Google redirects here; no bearer token.
+        resource :callback, only: :show, module: :google_calendar_connections
+      end
       resources :task_lists, only: %i[index create update destroy] do
         resources :tasks, only: %i[index create update destroy]
       end

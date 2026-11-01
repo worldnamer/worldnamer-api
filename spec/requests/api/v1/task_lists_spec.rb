@@ -352,6 +352,29 @@ RSpec.describe "/api/v1/task_lists", type: :request do
       expect(response.parsed_body["task_lists"]).to eq([ { "id" => keep.id, "name" => "Keep" } ])
     end
 
+    it "removes the list's tasks and keeps the caller's other lists' tasks" do
+      gone = create(:task_list, user: user)
+      keep = create(:task_list, user: user)
+      create_list(:task, 2, task_list: gone)
+      kept = create(:task, task_list: keep)
+
+      delete "/api/v1/task_lists/#{gone.id}", headers: bearer(token_for)
+
+      expect(response).to have_http_status(:no_content)
+      expect(Task.where(task_list_id: gone.id)).to be_empty
+      expect(Task.all).to contain_exactly(kept)
+    end
+
+    it "keeps another user's tasks when their list is refused with 404" do
+      theirs = create(:task_list, user: create(:user))
+      task = create(:task, task_list: theirs)
+
+      delete "/api/v1/task_lists/#{theirs.id}", headers: bearer(token_for)
+
+      expect_not_found
+      expect(Task.all).to contain_exactly(task)
+    end
+
     it "returns 404 for another user's list and keeps it" do
       theirs = create(:task_list, user: create(:user))
       token = token_for

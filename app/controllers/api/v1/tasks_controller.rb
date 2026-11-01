@@ -72,9 +72,10 @@ module Api
         !raw.respond_to?(:key?) || !raw.key?(:done) || [ true, false ].include?(raw[:done])
       end
 
-      # Only id, text and done leave the API: task_list_id and the timestamps stay inside.
+      # Only id, text, done and due_on leave the API: task_list_id and the timestamps stay inside. due_on is a Date, which
+      # ActiveSupport encodes as "YYYY-MM-DD", or nil, which is null.
       def task_json(task)
-        { id: task.id, text: task.text, done: task.done }
+        { id: task.id, text: task.text, done: task.done, due_on: task.due_on }
       end
     end
   end

@@ -32,16 +32,20 @@ module Api
         render_error "not_found", "Not found.", :not_found
       end
 
-      # PATCH /api/v1/task_lists/:task_list_id/tasks/:id edits a task's text, its done flag, or both. Unsent fields are
+      # PATCH /api/v1/task_lists/:task_list_id/tasks/:id edits a task's text, its done flag, its due date, or any mix. Unsent fields are
       # left alone. The task is found through the list that was found through the caller, so a task in someone else's
       # list, or in another of the caller's lists, gets the same 404 as a missing one. That lookup runs before the body
-      # is read, so a bad body sent to a task that is not yours is a 404, not a 400. Only text and done are permitted:
+      # is read, so a bad body sent to a task that is not yours is a 404, not a 400. Only text, done and due_on are permitted:
       # task_list_id and id in the body are dropped, so a task cannot be moved.
       def update
         task = @task_list.tasks.find(params[:id])
         return render_error("bad_request", "done must be true or false.", :bad_request) unless done_valid?
 
-        changes = params.expect(task: [ :text, :done ])
+        return render_error("bad_request", "due_on must be a date in the form YYYY-MM-DD, or null.", :bad_request) unless due_on_valid?
+
+        changes = params.expect(task: [ :text, :done, :due_on ])
+        # Store the parsed Date, never the raw string, so Rails' own date cast (which is lenient) is not involved.
+        changes[:due_on] = IsoDate.parse(changes[:due_on]) if changes.key?(:due_on)
         if task.update(changes)
           render json: { task: task_json(task) }
         else
@@ -70,6 +74,15 @@ module Api
       def done_valid?
         raw = params[:task]
         !raw.respond_to?(:key?) || !raw.key?(:done) || [ true, false ].include?(raw[:done])
+      end
+
+      # due_on has three states when it is sent: absent leaves the date alone, null clears it, a YYYY-MM-DD string sets it.
+      # Anything else is refused. Left to Rails, garbage would be cast to nil and silently clear the date, and a datetime
+      # would be accepted. The raw value is checked, because params.expect would silently drop a hash or array. A task
+      # that is not a hash is left for params.expect to refuse as malformed.
+      def due_on_valid?
+        raw = params[:task]
+        !raw.respond_to?(:key?) || !raw.key?(:due_on) || raw[:due_on].nil? || !IsoDate.parse(raw[:due_on]).nil?
       end
 
       # Only id, text, done and due_on leave the API: task_list_id and the timestamps stay inside. due_on is a Date, which

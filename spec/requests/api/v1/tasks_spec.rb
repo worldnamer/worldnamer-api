@@ -97,4 +97,205 @@ RSpec.describe "/api/v1/task_lists/:task_list_id/tasks", type: :request do
       expect(response.headers["Cache-Control"]).to include("private")
     end
   end
+
+  describe "POST /api/v1/task_lists/:task_list_id/tasks" do
+    def post_task(list_id, body, token: token_for)
+      post "/api/v1/task_lists/#{list_id}/tasks", params: body, as: :json, headers: bearer(token)
+    end
+
+    def expect_error(status, code, message)
+      expect(response).to have_http_status(status)
+      expect(response.parsed_body).to eq("error" => { "code" => code, "message" => message })
+    end
+
+    it "returns 401 unauthenticated with no token or a bad token, and creates nothing" do
+      expect {
+        post "/api/v1/task_lists/#{list.id}/tasks", params: { task: { text: "Milk" } }, as: :json
+        expect_unauthenticated
+
+        post "/api/v1/task_lists/#{list.id}/tasks", params: { task: { text: "Milk" } }, as: :json,
+                                                    headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+      }.not_to change(Task, :count)
+    end
+
+    it "creates the task in the list and returns 201 with its id, text and done false" do
+      post_task(list.id, { task: { text: "Milk" } })
+
+      task = Task.last
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body).to eq("task" => { "id" => task.id, "text" => "Milk", "done" => false })
+      expect(task.task_list).to eq(list)
+    end
+
+    it "lists the new task last" do
+      create(:task, task_list: list, text: "Older", done: true)
+      token = token_for
+
+      post_task(list.id, { task: { text: "Milk" } }, token: token)
+      get "/api/v1/task_lists/#{list.id}/tasks", headers: bearer(token)
+
+      expect(response.parsed_body["tasks"].map { |task| task["text"] }).to eq([ "Older", "Milk" ])
+    end
+
+    it "accepts an empty, whitespace-only or nil text and stores an empty string" do
+      token = token_for
+
+      expect {
+        [ { text: "" }, { text: "   " }, { text: nil } ].each do |task|
+          post_task(list.id, { task: task }, token: token)
+          expect(response).to have_http_status(:created)
+          expect(response.parsed_body["task"]["text"]).to eq("")
+        end
+      }.to change(Task, :count).by(3)
+      expect(Task.pluck(:text)).to all(eq(""))
+    end
+
+    it "strips spaces at the start and end of the text" do
+      post_task(list.id, { task: { text: "  Milk  " } })
+
+      expect(response.parsed_body["task"]["text"]).to eq("Milk")
+      expect(Task.last.text).to eq("Milk")
+    end
+
+    it "accepts 100 characters and refuses 101 with 422 and the exact message, creating nothing" do
+      token = token_for
+
+      post_task(list.id, { task: { text: "a" * 100 } }, token: token)
+      expect(response).to have_http_status(:created)
+
+      expect {
+        post_task(list.id, { task: { text: "a" * 101 } }, token: token)
+      }.not_to change(Task, :count)
+      expect_error(:unprocessable_content, "validation_failed", "Text is too long (maximum is 100 characters).")
+    end
+
+    it "creates two tasks for the same text sent twice" do
+      token = token_for
+
+      expect {
+        2.times { post_task(list.id, { task: { text: "Milk" } }, token: token) }
+      }.to change(Task, :count).by(2)
+    end
+
+    it "returns 400 when the task key is missing, and for a top-level text" do
+      expect {
+        post_task(list.id, { text: "Milk" })
+        expect_error(:bad_request, "bad_request", "Request body is malformed.")
+
+        post_task(list.id, {})
+        expect_error(:bad_request, "bad_request", "Request body is malformed.")
+      }.not_to change(Task, :count)
+    end
+
+    it "ignores done, task_list_id and id in the body" do
+      other_list = create(:task_list, user: user)
+
+      post_task(list.id, { task: { text: "Milk", done: true, task_list_id: other_list.id, id: 999_999 } })
+
+      task = Task.last
+      expect(response).to have_http_status(:created)
+      expect(task.done).to be(false)
+      expect(task.task_list).to eq(list)
+      expect(task.id).not_to eq(999_999)
+      expect(response.parsed_body["task"]).to eq("id" => task.id, "text" => "Milk", "done" => false)
+    end
+
+    # params.expect(task: [ :text ]) permits scalars only. A hash or an array in text is dropped, which leaves nothing
+    # permitted, and params.expect treats that like a missing key: 400, not an empty task. Pinned here so a change of
+    # behavior shows up in review.
+    it "returns 400 and creates nothing for a non-scalar text" do
+      token = token_for
+
+      expect {
+        [ { "a" => "b" }, [ "Milk" ], [ { "a" => "b" } ], {}, [] ].each do |text|
+          post_task(list.id, { task: { text: text } }, token: token)
+
+          expect_error(:bad_request, "bad_request", "Request body is malformed.")
+        end
+      }.not_to change(Task, :count)
+    end
+
+    it "returns 400 for a task body with no text key, such as only unpermitted keys" do
+      post_task(list.id, { task: { done: true } })
+
+      expect_error(:bad_request, "bad_request", "Request body is malformed.")
+      expect(Task.count).to eq(0)
+    end
+
+    it "returns 400 when task itself is not a hash" do
+      post_task(list.id, { task: "Milk" })
+
+      expect_error(:bad_request, "bad_request", "Request body is malformed.")
+      expect(Task.count).to eq(0)
+    end
+
+    it "returns the same 404 for another user's, a missing, a non-numeric and an out-of-range list, creating nothing" do
+      theirs = create(:task_list, user: create(:user))
+      token = token_for
+
+      expect {
+        [ theirs.id.to_s, (theirs.id + 1000).to_s, "abc", "-1", "99999999999999999999999999" ].each do |id|
+          post_task(id, { task: { text: "Milk" } }, token: token)
+          expect_not_found
+        end
+      }.not_to change(Task, :count)
+    end
+
+    it "returns 404 for another user's list even when the body is malformed" do
+      theirs = create(:task_list, user: create(:user))
+
+      post_task(theirs.id, { text: "Milk" })
+
+      expect_not_found
+    end
+
+    it "returns 404, not 500, when the list is deleted between the lookup and the insert" do
+      token = token_for
+      allow_any_instance_of(Task).to receive(:save).and_wrap_original do |original, *args|
+        TaskList.where(id: list.id).delete_all
+        original.call(*args)
+      end
+
+      post_task(list.id, { task: { text: "Milk" } }, token: token)
+
+      expect_not_found
+      expect(Task.count).to eq(0)
+    end
+
+    it "puts the task text in no span attribute or event" do
+      text = "SENTINEL-task-4d8a2f60-do-not-trace"
+      token = token_for
+      TelemetryHelpers.reset
+
+      post_task(list.id, { task: { text: text } }, token: token)
+
+      expect(response).to have_http_status(:created)
+      spans = captured_spans
+      # Non-vacuous: the request and its insert were traced.
+      expect(spans).not_to be_empty
+      dumped = spans.map { |span| [ span.name, span.attributes, Array(span.events).map { |e| [ e.name, e.attributes ] } ] }.inspect
+      expect(dumped).to include("/api/v1/task_lists")
+      expect(dumped).not_to include(text)
+    end
+
+    it "puts the task text in no Sentry event" do
+      text = "SENTINEL-task-8c15e7b3-do-not-report"
+      token = token_for
+      TelemetryHelpers.reset
+
+      # A failure after the text is read is captured by Sentry; the text must not be in the event.
+      allow_any_instance_of(Task).to receive(:save).and_raise(RuntimeError, "forced save failure")
+      begin
+        post_task(list.id, { task: { text: text } }, token: token)
+      rescue RuntimeError
+        # In the test environment Rails re-raises unrescued errors; Sentry's middleware has already captured it.
+      end
+
+      dumped = captured_sentry_events.map(&:to_h).inspect
+      # Non-vacuous: it is our forced error.
+      expect(dumped).to include("forced save failure")
+      expect(dumped).not_to include(text)
+    end
+  end
 end

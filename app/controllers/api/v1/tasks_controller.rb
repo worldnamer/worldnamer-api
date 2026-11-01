@@ -32,6 +32,19 @@ module Api
         render_error "not_found", "Not found.", :not_found
       end
 
+      # PATCH /api/v1/task_lists/:task_list_id/tasks/:id edits a task's text. The task is found through the list that was
+      # found through the caller, so a task in someone else's list, or in another of the caller's lists, gets the same 404
+      # as a missing one. That lookup runs before the body is read, so a bad body sent to a task that is not yours is a
+      # 404, not a 400. Only text is permitted: task_list_id and id in the body are dropped, so a task cannot be moved.
+      def update
+        task = @task_list.tasks.find(params[:id])
+        if task.update(params.expect(task: [ :text ]))
+          render json: { task: task_json(task) }
+        else
+          render_error "validation_failed", "#{task.errors.full_messages.first}.", :unprocessable_content
+        end
+      end
+
       private
 
       # Scoped to the caller's lists, so a missing, foreign, non-numeric or out-of-range id all raise RecordNotFound (404).

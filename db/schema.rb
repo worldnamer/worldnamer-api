@@ -10,9 +10,19 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_01_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_01_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "google_calendar_connections", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.text "refresh_token"
+    t.datetime "connected_at", null: false
+    t.datetime "lost_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_google_calendar_connections_on_user_id", unique: true
+  end
 
   create_table "habit_completions", force: :cascade do |t|
     t.bigint "habit_id", null: false
@@ -240,6 +250,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_01_000001) do
     t.index ["username"], name: "index_users_on_username", unique: true
   end
 
+  add_foreign_key "google_calendar_connections", "users", on_delete: :cascade
   add_foreign_key "habit_completions", "habits", on_delete: :cascade
   add_foreign_key "habits", "users", on_delete: :cascade
   add_foreign_key "refresh_tokens", "users", on_delete: :cascade

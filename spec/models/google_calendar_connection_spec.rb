@@ -115,6 +115,34 @@ RSpec.describe GoogleCalendarConnection, type: :model do
     end
   end
 
+  describe "#mint_access_token" do
+    let(:client) { GoogleCalendar::OauthClient.new }
+
+    it "returns a new access token and stores nothing when Google sends no new refresh token" do
+      record = create(:google_calendar_connection, refresh_token: "1//stored")
+      stub_google_tokens(access_token: "ya29.minted", grant_type: "refresh_token")
+
+      expect { expect(record.mint_access_token(client: client)).to eq("ya29.minted") }
+        .not_to change { GoogleCalendarConnection.find(record.id).attributes }
+    end
+
+    it "stores a new refresh token when Google sends one" do
+      record = create(:google_calendar_connection, refresh_token: "1//stored")
+      stub_google_tokens(access_token: "ya29.minted", refresh_token: "1//rotated")
+
+      expect(record.mint_access_token(client: client)).to eq("ya29.minted")
+      expect(GoogleCalendarConnection.find(record.id).refresh_token).to eq("1//rotated")
+    end
+
+    it "raises InvalidGrant and changes nothing when Google rejects the token" do
+      record = create(:google_calendar_connection)
+      stub_google_token_error("invalid_grant")
+
+      expect { record.mint_access_token(client: client) }.to raise_error(GoogleCalendar::OauthClient::InvalidGrant)
+      expect(GoogleCalendarConnection.find(record.id).lost_at).to be_nil
+    end
+  end
+
   describe "#check" do
     let(:client) { GoogleCalendar::OauthClient.new }
 

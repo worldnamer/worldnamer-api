@@ -162,6 +162,16 @@ RSpec.describe "Leak checks on GET /api/v1/google_calendar_connection/events", t
     expect_none_of(sentinels, dump)
   end
 
+  # MemoryStore has no way to list its entries, so this reads its internal table. The title is expected there; it is
+  # what the cache is for.
+  it "keeps the description and the tokens out of the events cache, which holds the title" do
+    fetch_events
+
+    dump = google_calendar_events_cache.instance_variable_get(:@data).inspect
+    expect(dump).to include(title) # non-vacuous: the events really were cached
+    expect_none_of(secrets, dump)
+  end
+
   it "keeps the description and the tokens out of the response body, which holds the title" do
     fetch_events
 

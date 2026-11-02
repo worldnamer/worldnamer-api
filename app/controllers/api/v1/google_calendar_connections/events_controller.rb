@@ -9,12 +9,16 @@ module Api
         # Event titles are private: no browser or proxy cache may keep them.
         before_action :no_store
 
+        # How long a user's events are answered from the cache before Google is asked again.
+        EVENTS_TTL = 60.seconds
+
         # GET /api/v1/google_calendar_connection/events. Any parameters are ignored.
         #
-        # With no connection, or a lost one, the status comes with events: null and Google is not called. Otherwise
-        # this makes two blocking calls to Google on the request's thread (a token, then Events: list), normally well
-        # under a second but up to about 11 seconds if both time out. Every failure is a 502 that changes nothing,
-        # except Google rejecting the stored token, which marks the connection lost.
+        # With no connection, or a lost one, the status comes with events: null and Google is not called. A connected
+        # user's events are answered from the cache for a minute, so a revocation in Google can take that long to show
+        # as lost. On a miss this makes two blocking calls to Google on the request's thread (a token, then Events:
+        # list), normally well under a second but up to about 11 seconds if both time out. Every failure is a 502 that
+        # changes nothing, except Google rejecting the stored token, which marks the connection lost.
         #
         # A stored token that cannot be decrypted (lost encryption keys) is not rescued: it is a 500, and the user
         # reconnects.
@@ -23,7 +27,7 @@ module Api
           return render_status("not_connected") unless connection
           return render_status("lost") if connection.lost_at
 
-          render json: { google_calendar_connection: { status: "connected" }, events: fetch_events(connection) }
+          render json: { google_calendar_connection: { status: "connected" }, events: cached_events(connection) }
         rescue GoogleCalendar::OauthClient::InvalidGrant
           # If the user reconnected while this request was running, mark_lost! leaves the new connection alone, and
           # this request, made with the old token, has nothing to show.
@@ -37,9 +41,20 @@ module Api
 
         private
 
-        # The access token lives in a local variable for this request only.
-        def fetch_events(connection)
+        # Only the normalized events and fetched_at are cached: never a token, Google's own answer, a failure or "lost"
+        # (a block that raises writes nothing). The key starts with the user's id, so one user can never be answered
+        # from another's entry; connected_at drops the entry on a reconnect, which may be to another Google account;
+        # the UTC date matches the window the events were fetched for.
+        def cached_events(connection)
           utc_date = Time.now.utc.to_date
+          key = [ "google_calendar_events", current_user.id, connection.connected_at.to_i, utc_date.iso8601 ]
+          Rails.configuration.x.google_calendar.events_cache.fetch(key, expires_in: EVENTS_TTL) do
+            fetch_events(connection, utc_date)
+          end
+        end
+
+        # The access token lives in a local variable for this request only.
+        def fetch_events(connection, utc_date)
           access_token = connection.mint_access_token
           items = GoogleCalendar::EventsClient.new.list(access_token: access_token, utc_date: utc_date)
           { fetched_at: Time.now.utc.iso8601, items: GoogleCalendar::EventNormalizer.call(items) }

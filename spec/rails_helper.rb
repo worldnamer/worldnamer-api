@@ -3,6 +3,11 @@ require 'spec_helper'
 ENV['RAILS_ENV'] ||= 'test'
 # Fixed throwaway key for signing test JWTs. Set before the app boots; never a real secret.
 ENV['DEVISE_JWT_SECRET_KEY'] = 'spec-only-throwaway-jwt-key-0123456789abcdef'
+# Fixed Google OAuth client values, set before the app boots so a developer's real ones (if any) are never used.
+# The secret is distinctive so the leak specs can search for it.
+ENV['GOOGLE_CLIENT_ID'] = 'spec-client-id.apps.googleusercontent.com'
+ENV['GOOGLE_CLIENT_SECRET'] = 'SENTINEL-google-client-secret-5d1c-do-not-leak'
+ENV['GOOGLE_REDIRECT_URI'] = 'http://www.example.com/api/v1/google_calendar_connection/callback'
 require_relative '../config/environment'
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?

@@ -33,14 +33,25 @@ class GoogleCalendarConnection < ApplicationRecord
   def check(client: GoogleCalendar::OauthClient.new)
     return status if lost_at
 
-    tokens = client.refresh_access_token(refresh_token)
-    store_rotated_refresh_token(tokens.refresh_token) if tokens.refresh_token
+    mint_access_token(client: client)
     "connected"
   rescue GoogleCalendar::OauthClient::InvalidGrant
     # If the user reconnected while the check was running, mark_lost! leaves the new connection alone.
     mark_lost! ? "lost" : reload.status
   rescue GoogleCalendar::OauthClient::Error
     status
+  end
+
+  # Swaps the stored refresh token for a new access token and returns it, a blocking call to Google. The access token
+  # is for this request only: the caller uses it and drops it, and it is never stored, cached or logged. A new refresh
+  # token, if Google sends one, is stored (encrypted) unless the user has reconnected in the meantime.
+  #
+  # Raises GoogleCalendar::OauthClient::InvalidGrant when Google no longer accepts the stored token (the caller
+  # decides whether to mark_lost!), and GoogleCalendar::OauthClient::Error for anything else.
+  def mint_access_token(client: GoogleCalendar::OauthClient.new)
+    tokens = client.refresh_access_token(refresh_token)
+    store_rotated_refresh_token(tokens.refresh_token) if tokens.refresh_token
+    tokens.access_token
   end
 
   # Clears the token and sets lost_at, in ONE conditional statement:

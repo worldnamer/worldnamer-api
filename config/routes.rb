@@ -22,6 +22,8 @@ Rails.application.routes.draw do
         resource :authorization, only: :create, module: :google_calendar_connections
         # GoogleCalendarConnections::CallbacksController#show. Google redirects here; no bearer token.
         resource :callback, only: :show, module: :google_calendar_connections
+        # GoogleCalendarConnections::EventsController#index. The caller's own events only; no ids in the path.
+        resources :events, only: :index, module: :google_calendar_connections
       end
       resources :task_lists, only: %i[index create update destroy] do
         resources :tasks, only: %i[index create update destroy]

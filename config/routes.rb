@@ -31,7 +31,7 @@ Rails.application.routes.draw do
         resource :done_tasks, only: :destroy
       end
       # RecipesController. The caller's own recipes only.
-      resources :recipes, only: %i[index]
+      resources :recipes, only: %i[index show]
       resources :habits, only: %i[index create destroy] do
         # /habits/:habit_id/completions/:date. param: :date names the segment :date instead of :id.
         resources :completions, only: %i[update destroy], param: :date

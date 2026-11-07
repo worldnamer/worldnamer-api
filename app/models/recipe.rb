@@ -1,4 +1,7 @@
 class Recipe < ApplicationRecord
+  # Title of a freshly added recipe. The user renames it later.
+  DEFAULT_TITLE = "New recipe"
+
   belongs_to :user
 
   # Ingredients have no callbacks, so one DELETE removes them. The foreign key cascades in the database as well.

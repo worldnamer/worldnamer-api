@@ -215,4 +215,142 @@ RSpec.describe "/api/v1/recipes", type: :request do
       expect(captured_sentry_events.map(&:to_h).inspect).not_to include("SENTINEL-recipe")
     end
   end
+
+  describe "POST /api/v1/recipes" do
+    let(:new_recipe_fields) do
+      { "title" => "New recipe", "ingredients" => [], "prep_instructions" => "", "prep_minutes" => nil,
+        "cook_instructions" => "", "cook_minutes" => nil }
+    end
+
+    it "returns 401 unauthenticated with no token, a malformed token or an expired token, and creates nothing" do
+      token = token_for
+
+      expect do
+        post "/api/v1/recipes"
+        expect_unauthenticated
+        first_body = response.body
+
+        post "/api/v1/recipes", headers: bearer("this.is.notajwt")
+        expect_unauthenticated
+        expect(response.body).to eq(first_body)
+
+        travel 16.minutes do
+          post "/api/v1/recipes", headers: bearer(token)
+        end
+        expect_unauthenticated
+        expect(response.body).to eq(first_body)
+      end.not_to change(Recipe, :count)
+    end
+
+    it "creates a recipe for the caller and returns exactly the show shape with the default fields" do
+      expect { post "/api/v1/recipes", headers: bearer(token_for) }.to change(user.recipes, :count).by(1)
+
+      recipe = user.recipes.last
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body).to eq("recipe" => { "id" => recipe.id }.merge(new_recipe_fields))
+    end
+
+    it "returns the same body that show returns for the new recipe" do
+      token = token_for
+      post "/api/v1/recipes", headers: bearer(token)
+      created = response.parsed_body
+
+      get "/api/v1/recipes/#{created.dig('recipe', 'id')}", headers: bearer(token)
+
+      expect(response.parsed_body).to eq(created)
+    end
+
+    it "does not touch another user's recipes and does not list the new one for them" do
+      other = create(:user)
+      theirs = create(:recipe, user: other, title: "Theirs")
+      before = theirs.reload.attributes
+
+      post "/api/v1/recipes", headers: bearer(token_for)
+
+      expect(theirs.reload.attributes).to eq(before)
+      expect(other.recipes.count).to eq(1)
+      expect(Recipe.count).to eq(2)
+    end
+
+    it "ignores user_id, title, id, prep_minutes and a nested recipe hash in the body and the query string" do
+      other = create(:user)
+      theirs = create(:recipe, user: other, title: "Theirs")
+      before = theirs.reload.attributes
+      token = token_for
+      hostile = { user_id: other.id, title: "Hijacked", id: theirs.id, prep_minutes: 99, cook_minutes: 5,
+                  prep_instructions: "x", recipe: { user_id: other.id, title: "Hijacked", id: theirs.id, prep_minutes: 99 } }
+
+      [
+        { params: hostile },
+        { params: hostile.to_json, headers: { "CONTENT_TYPE" => "application/json" } },
+        { params: nil, query: "user_id=#{other.id}&title=Hijacked&id=#{theirs.id}&prep_minutes=99&recipe[user_id]=#{other.id}&recipe[title]=Hijacked" }
+      ].each do |variant|
+        path = variant[:query] ? "/api/v1/recipes?#{variant[:query]}" : "/api/v1/recipes"
+        expect do
+          post path, params: variant[:params], headers: bearer(token).merge(variant[:headers] || {})
+        end.to change(Recipe, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+        created = Recipe.order(:id).last
+        expect(created.user_id).to eq(user.id)
+        expect(created.id).not_to eq(theirs.id)
+        expect(response.parsed_body).to eq("recipe" => { "id" => created.id }.merge(new_recipe_fields))
+        expect(created.prep_minutes).to be_nil
+        expect(created.cook_minutes).to be_nil
+        expect(theirs.reload.attributes).to eq(before)
+      end
+
+      expect(other.recipes.count).to eq(1)
+    end
+
+    it "makes a second recipe on a second POST" do
+      token = token_for
+
+      expect do
+        post "/api/v1/recipes", headers: bearer(token)
+        post "/api/v1/recipes", headers: bearer(token)
+      end.to change(user.recipes, :count).by(2)
+
+      expect(user.recipes.pluck(:title)).to eq([ "New recipe", "New recipe" ])
+    end
+
+    it "is not shared or public: Cache-Control contains private" do
+      post "/api/v1/recipes", headers: bearer(token_for)
+
+      expect(response.headers["Cache-Control"]).to include("private")
+    end
+
+    it "ignores a malformed JSON body and still creates the recipe" do
+      token = token_for
+
+      # The controller never reads params, so Rails never parses the body and the bad JSON goes unnoticed: the request
+      # is treated like one without a body.
+      expect do
+        post "/api/v1/recipes", params: "{not json", headers: bearer(token).merge("CONTENT_TYPE" => "application/json")
+      end.to change(user.recipes, :count).by(1)
+
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body).to eq("recipe" => { "id" => user.recipes.last.id }.merge(new_recipe_fields))
+    end
+
+    it "puts no request text in any span attribute, event, Sentry event or the response" do
+      sentinel = "SENTINEL-recipe-create-9a4e2c71-do-not-trace"
+      token = token_for
+      TelemetryHelpers.reset
+
+      post "/api/v1/recipes",
+           params: { title: "#{sentinel}-title", recipe: { title: "#{sentinel}-nested" } }.to_json,
+           headers: bearer(token).merge("CONTENT_TYPE" => "application/json")
+
+      expect(response).to have_http_status(:created)
+      # Non-vacuous: the request was traced. The query string is left out on purpose: the Rack span records it raw
+      # (url.query) for every traced path, so a sentinel there would always show.
+      expect(captured_spans).not_to be_empty
+      dumped = dumped_telemetry
+      expect(dumped).to include("/api/v1/recipes")
+      expect(dumped).not_to include("SENTINEL-recipe-create")
+      expect(response.body).not_to include("SENTINEL-recipe-create")
+      expect(captured_sentry_events.map(&:to_h).inspect).not_to include("SENTINEL-recipe-create")
+    end
+  end
 end

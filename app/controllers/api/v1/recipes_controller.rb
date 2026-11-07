@@ -20,6 +20,14 @@ module Api
         render json: { recipe: recipe_json(recipe) }
       end
 
+      # POST /api/v1/recipes. Reads no params at all: the owner comes from the token through current_user.recipes, and the
+      # fields are the defaults, so nothing in the request (body or query) can set an owner or a field. There is no rescue:
+      # the default title cannot fail validation, so a failure here is a real surprise and should be a 500 that Sentry sees.
+      def create
+        recipe = current_user.recipes.create!(title: Recipe::DEFAULT_TITLE)
+        render json: { recipe: recipe_json(recipe) }, status: :created
+      end
+
       private
 
       # An explicit allow-list: user_id, position, timestamps and ingredient ids stay inside. Ingredients are loaded in

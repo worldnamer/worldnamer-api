@@ -9,6 +9,12 @@ class ApplicationController < ActionController::API
     render_error "bad_request", "Request body is malformed.", :bad_request
   end
 
+  # Rails raises this when the body is read and is not valid JSON. The handler does not look at the exception, whose
+  # message can quote part of the body, so nothing of the body reaches the log, a span or a Sentry event.
+  rescue_from ActionDispatch::Http::Parameters::ParseError do
+    render_error "bad_request", "Request body is malformed.", :bad_request
+  end
+
   private
 
   # Every error body has the same shape: { "error": { "code": "<snake_case>", "message": "<human text>" } }.

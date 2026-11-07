@@ -12,7 +12,10 @@ class Recipe < ApplicationRecord
   normalizes :prep_instructions, :cook_instructions, with: ->(text) { text.to_s.strip }, apply_to_nil: true
 
   validates :title, presence: true, length: { maximum: 100 }
-  validates :prep_minutes, :cook_minutes, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  # The caps bound what one request can store. The minutes cap also keeps a huge number from reaching the integer column.
+  validates :prep_instructions, :cook_instructions, length: { maximum: 10_000 }
+  validates :prep_minutes, :cook_minutes,
+            numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 99_999 }, allow_nil: true
 
   # Case-insensitive alphabetical; id breaks ties. LOWER(title) cannot use an index, which is fine for one user's rows.
   scope :alphabetical, -> { order(Arel.sql("LOWER(title)"), :id) }

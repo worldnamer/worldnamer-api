@@ -14,6 +14,10 @@ class User < ApplicationRecord
   # Lists have no callbacks either; the foreign key cascades in the database as well.
   has_many :task_lists, dependent: :delete_all
 
+  # Recipes have no callbacks either; the foreign key cascades in the database as well. Ingredients hang off a recipe,
+  # so a deleted user's ingredients go through that cascade too.
+  has_many :recipes, dependent: :delete_all
+
   # At most one Google Calendar link. No callbacks on it; the foreign key cascades in the database as well.
   has_one :google_calendar_connection, dependent: :delete
   # At most one Google sign-in in progress. Same reasoning.

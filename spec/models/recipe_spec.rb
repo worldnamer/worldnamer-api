@@ -46,6 +46,28 @@ RSpec.describe Recipe, type: :model do
     end
   end
 
+  it "accepts 10000 characters of instructions and refuses 10001" do
+    expect(build(:recipe, prep_instructions: "a" * 10_000, cook_instructions: "a" * 10_000)).to be_valid
+
+    %i[prep_instructions cook_instructions].each do |field|
+      recipe = build(:recipe, field => "a" * 10_001)
+      expect(recipe).not_to be_valid
+      expect(recipe.errors[field]).to be_present
+      expect(recipe.errors.full_messages.join).not_to include("aaaa")
+    end
+  end
+
+  it "accepts 99999 minutes and refuses more, including a value beyond the integer column" do
+    expect(build(:recipe, prep_minutes: 99_999, cook_minutes: 99_999)).to be_valid
+
+    [ 100_000, 3_000_000_000, "99999999999999999999" ].each do |minutes|
+      recipe = build(:recipe, prep_minutes: minutes, cook_minutes: minutes)
+      expect(recipe).not_to be_valid
+      expect(recipe.errors[:prep_minutes]).to be_present
+      expect(recipe.errors[:cook_minutes]).to be_present
+    end
+  end
+
   describe ".alphabetical" do
     it "orders case-insensitively and breaks ties by id" do
       bread = create(:recipe, title: "bread")

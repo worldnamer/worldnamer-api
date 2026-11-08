@@ -31,7 +31,10 @@ Rails.application.routes.draw do
         resource :done_tasks, only: :destroy
       end
       # RecipesController. The caller's own recipes only.
-      resources :recipes, only: %i[index show create update destroy]
+      resources :recipes, only: %i[index show create update destroy] do
+        # RecipeTaskListsController#create. Singular: no id in the path, it means the task list made from this recipe.
+        resource :task_list, only: :create, controller: :recipe_task_lists
+      end
       resources :habits, only: %i[index create destroy] do
         # /habits/:habit_id/completions/:date. param: :date names the segment :date instead of :id.
         resources :completions, only: %i[update destroy], param: :date

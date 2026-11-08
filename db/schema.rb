@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_01_100002) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_07_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -49,6 +49,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_01_100002) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id"], name: "index_habits_on_user_id"
+  end
+
+  create_table "recipe_ingredients", force: :cascade do |t|
+    t.bigint "recipe_id", null: false
+    t.integer "position", null: false
+    t.string "name", limit: 100, null: false
+    t.string "amount", limit: 50, default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["recipe_id", "position"], name: "index_recipe_ingredients_on_recipe_id_and_position", unique: true
+    t.index ["recipe_id"], name: "index_recipe_ingredients_on_recipe_id"
+  end
+
+  create_table "recipes", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "title", limit: 100, null: false
+    t.text "prep_instructions", default: "", null: false
+    t.text "cook_instructions", default: "", null: false
+    t.integer "prep_minutes"
+    t.integer "cook_minutes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_recipes_on_user_id"
   end
 
   create_table "refresh_tokens", force: :cascade do |t|
@@ -265,6 +288,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_01_100002) do
   add_foreign_key "google_oauth_states", "users", on_delete: :cascade
   add_foreign_key "habit_completions", "habits", on_delete: :cascade
   add_foreign_key "habits", "users", on_delete: :cascade
+  add_foreign_key "recipe_ingredients", "recipes", on_delete: :cascade
+  add_foreign_key "recipes", "users", on_delete: :cascade
   add_foreign_key "refresh_tokens", "users", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_batches", column: "batch_id", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

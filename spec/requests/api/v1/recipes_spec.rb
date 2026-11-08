@@ -743,4 +743,111 @@ RSpec.describe "/api/v1/recipes", type: :request do
       end
     end
   end
+
+  describe "DELETE /api/v1/recipes/:id" do
+    def expect_not_found
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("error" => { "code" => "not_found", "message" => "Not found." })
+    end
+
+    it "returns 401 unauthenticated with no token, a malformed token or an expired token, and deletes nothing" do
+      recipe = create(:recipe, user: user)
+
+      delete "/api/v1/recipes/#{recipe.id}"
+      expect_unauthenticated
+
+      delete "/api/v1/recipes/#{recipe.id}", headers: bearer("this.is.notajwt")
+      expect_unauthenticated
+
+      token = token_for
+      travel 16.minutes do
+        delete "/api/v1/recipes/#{recipe.id}", headers: bearer(token)
+      end
+      expect_unauthenticated
+      expect(Recipe.exists?(recipe.id)).to be(true)
+    end
+
+    it "answers 204 with an empty body and removes the recipe and its ingredients" do
+      recipe = create(:recipe, user: user)
+      create(:recipe_ingredient, recipe: recipe, name: "flour", position: 0)
+      create(:recipe_ingredient, recipe: recipe, name: "salt", position: 1)
+      other = create(:recipe, user: user)
+      create(:recipe_ingredient, recipe: other, name: "sugar", position: 0)
+
+      delete "/api/v1/recipes/#{recipe.id}", headers: bearer(token_for)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to be_empty
+      expect(Recipe.exists?(recipe.id)).to be(false)
+      expect(RecipeIngredient.where(recipe_id: recipe.id)).to be_empty
+      expect(Recipe.exists?(other.id)).to be(true)
+      expect(other.recipe_ingredients.count).to eq(1)
+    end
+
+    it "answers 404 for another user's recipe and leaves it, and its owner's read of it, untouched" do
+      theirs_owner = create(:user)
+      theirs = create(:recipe, user: theirs_owner, title: "Theirs")
+      create(:recipe_ingredient, recipe: theirs, name: "secret", position: 0)
+
+      delete "/api/v1/recipes/#{theirs.id}", headers: bearer(token_for)
+
+      expect_not_found
+      expect(Recipe.exists?(theirs.id)).to be(true)
+      expect(theirs.recipe_ingredients.count).to eq(1)
+
+      get "/api/v1/recipes/#{theirs.id}", headers: bearer(token_for(theirs_owner))
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("recipe", "title")).to eq("Theirs")
+    end
+
+    it "answers another user's, a missing and a non-numeric id with the identical 404, byte for byte" do
+      theirs = create(:recipe, user: create(:user), title: "Theirs")
+      token = token_for
+
+      bodies = [ theirs.id.to_s, (theirs.id + 1000).to_s, "abc", "1.5", "-1", "99999999999999999999999999" ].map do |id|
+        delete "/api/v1/recipes/#{id}", headers: bearer(token)
+        expect_not_found
+        [ response.status, response.body ]
+      end
+
+      expect(bodies.uniq.size).to eq(1)
+      expect(bodies.first.last).not_to include("Theirs")
+      expect(Recipe.exists?(theirs.id)).to be(true)
+    end
+
+    it "puts no recipe text in any span attribute, event, Sentry event or the response" do
+      recipe = create(:recipe, user: user, title: "SENTINEL-recipe-delete-title-5b2e8d14-do-not-trace",
+                               prep_instructions: "SENTINEL-recipe-delete-prep-7a3c9f60")
+      create(:recipe_ingredient, recipe: recipe, name: "SENTINEL-recipe-delete-ingredient-1d6e4b82", amount: "SENTINEL-recipe-delete-amount-9c0a3e57")
+      token = token_for
+      TelemetryHelpers.reset
+
+      delete "/api/v1/recipes/#{recipe.id}", headers: bearer(token)
+
+      expect(response).to have_http_status(:no_content)
+      # Non-vacuous: the request was traced.
+      expect(captured_spans).not_to be_empty
+      dumped = dumped_telemetry
+      expect(dumped).to include("/api/v1/recipes")
+      expect(dumped).not_to include("SENTINEL-recipe-delete")
+      expect(captured_sentry_events.map(&:to_h).inspect).not_to include("SENTINEL-recipe-delete")
+    end
+
+    it "puts no recipe text in telemetry or the response when the id belongs to someone else (404)" do
+      theirs = create(:recipe, user: create(:user), title: "SENTINEL-recipe-delete-foreign-4e7b1a93-do-not-trace")
+      create(:recipe_ingredient, recipe: theirs, name: "SENTINEL-recipe-delete-foreign-ingredient-2f8d6c05")
+      token = token_for
+      TelemetryHelpers.reset
+
+      delete "/api/v1/recipes/#{theirs.id}", headers: bearer(token)
+
+      expect_not_found
+      expect(captured_spans).not_to be_empty
+      dumped = dumped_telemetry
+      expect(dumped).to include("/api/v1/recipes")
+      expect(dumped).not_to include("SENTINEL-recipe-delete")
+      expect(response.body).not_to include("SENTINEL-recipe-delete")
+      expect(captured_sentry_events.map(&:to_h).inspect).not_to include("SENTINEL-recipe-delete")
+    end
+  end
 end

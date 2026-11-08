@@ -57,6 +57,14 @@ module Api
         render json: { recipe: recipe_json(recipe.reload) }
       end
 
+      # DELETE /api/v1/recipes/:id. Reads no params beyond the id. The recipe is found through current_user.recipes, so
+      # someone else's recipe, a missing one and a non-numeric id all raise RecordNotFound and get the same 404. It is a
+      # hard delete, and the ingredient rows go with it.
+      def destroy
+        current_user.recipes.find(params[:id]).destroy!
+        head :no_content
+      end
+
       private
 
       # params.expect answers 400 (ParameterMissing) when recipe is missing, empty or not a hash. It silently turns an

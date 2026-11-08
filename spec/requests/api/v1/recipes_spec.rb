@@ -490,7 +490,7 @@ RSpec.describe "/api/v1/recipes", type: :request do
 
     it "accepts the largest allowed values" do
       patch_recipe(recipe: { title: "t" * 100, prep_instructions: "p" * 10_000, cook_instructions: "c" * 10_000, prep_minutes: 99_999,
-                             ingredients: Array.new(100) { |i| { name: "n" * 100, amount: "a" * 50 } } })
+                             ingredients: Array.new(100) { |i| { name: "n" * 50, amount: "a" * 49 } } })
 
       expect(response).to have_http_status(:ok)
       expect(stored.last.size).to eq(100)
@@ -518,12 +518,12 @@ RSpec.describe "/api/v1/recipes", type: :request do
         expect_validation_failed("ingredients.1.name")
         expect(response.parsed_body.dig("error", "fields", "ingredients.1.name")).to eq([ "Name can't be blank." ])
 
-        patch_recipe(recipe: { ingredients: [ { name: "n" * 101 } ] })
+        patch_recipe(recipe: { ingredients: [ { name: "n" * 51 } ] })
         expect_validation_failed("ingredients.0.name")
 
-        patch_recipe(recipe: { ingredients: [ { name: "ok", amount: "a" * 51 } ] })
+        patch_recipe(recipe: { ingredients: [ { name: "ok", amount: "a" * 50 } ] })
         expect_validation_failed("ingredients.0.amount")
-        expect(response.parsed_body.dig("error", "fields", "ingredients.0.amount")).to eq([ "Amount is too long (maximum is 50 characters)." ])
+        expect(response.parsed_body.dig("error", "fields", "ingredients.0.amount")).to eq([ "Amount is too long (maximum is 49 characters)." ])
 
         expect(stored).to eq(before)
       end
@@ -701,7 +701,7 @@ RSpec.describe "/api/v1/recipes", type: :request do
         TelemetryHelpers.reset
 
         patch_recipe({ recipe: { title: "#{sentinel}-title", prep_instructions: "#{sentinel}-prep", cook_instructions: "#{sentinel}-cook",
-                                 ingredients: [ { name: "#{sentinel}-name", amount: "#{sentinel}-amount" } ] } }, token: token)
+                                 ingredients: [ { name: "#{sentinel}-name", amount: "#{sentinel}-qty" } ] } }, token: token)
 
         expect(response).to have_http_status(:ok)
         # The response legitimately carries the user's own text, so it is left out of the check on this path.

@@ -40,14 +40,21 @@ RSpec.describe RecipeIngredient, type: :model do
     end
   end
 
-  it "accepts 100 characters of name and refuses 101" do
-    expect(build(:recipe_ingredient, name: "a" * 100)).to be_valid
-    expect(build(:recipe_ingredient, name: "a" * 101)).not_to be_valid
+  it "accepts 50 characters of name and refuses 51" do
+    expect(build(:recipe_ingredient, name: "a" * 50)).to be_valid
+    expect(build(:recipe_ingredient, name: "a" * 51)).not_to be_valid
   end
 
-  it "accepts 50 characters of amount and refuses 51" do
-    expect(build(:recipe_ingredient, amount: "a" * 50)).to be_valid
-    expect(build(:recipe_ingredient, amount: "a" * 51)).not_to be_valid
+  it "accepts 49 characters of amount and refuses 50" do
+    expect(build(:recipe_ingredient, amount: "a" * 49)).to be_valid
+    expect(build(:recipe_ingredient, amount: "a" * 50)).not_to be_valid
+  end
+
+  it "keeps the longest amount and name joined by a space within a task's 100 characters" do
+    ingredient = build(:recipe_ingredient, name: "n" * 50, amount: "a" * 49)
+
+    expect(ingredient).to be_valid
+    expect("#{ingredient.amount} #{ingredient.name}".length).to eq(100)
   end
 
   describe "position" do

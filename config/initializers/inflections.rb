@@ -11,6 +11,8 @@
 # end
 
 # These inflection rules are supported but not enabled by default:
-# ActiveSupport::Inflector.inflections(:en) do |inflect|
-#   inflect.acronym "RESTful"
-# end
+# In use here: constants for the product are spelled YouTube (YouTube::DataClient, YouTubeConnection), while files,
+# tables and routes stay youtube_*.
+ActiveSupport::Inflector.inflections(:en) do |inflect|
+  inflect.acronym "YouTube"
+end

@@ -105,7 +105,7 @@ RSpec.describe "Code and state leak checks on the Google Calendar sign-in", type
 
     it "lists the callback as an untraced endpoint of the Rack instrumentation" do
       config = OpenTelemetry::Instrumentation::Rack::Instrumentation.instance.config
-      expect(config[:untraced_endpoints]).to eq([ callback_path ])
+      expect(config[:untraced_endpoints]).to include(callback_path)
     end
 
     # The Rack instrumentation records the raw query string as url.query when the request starts; the ActionPack

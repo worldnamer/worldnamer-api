@@ -21,12 +21,16 @@ module WorldnamerTelemetry
     "OpenTelemetry::Instrumentation::PG" => { db_statement: :obfuscate },
     # Record no request or response headers (Authorization, Cookie).
     # The Rack span records the raw query string (url.query), and Google's OAuth callback carries the one-time code
-    # and the state there, so that path is not traced at all; its database and outgoing HTTP spans are skipped with it.
+    # and the state there, so those paths (the Calendar's and YouTube's) are not traced at all; their database and
+    # outgoing HTTP spans are skipped with them.
     # The match is on the exact path.
     "OpenTelemetry::Instrumentation::Rack" => {
       allowed_request_headers: [],
       allowed_response_headers: [],
-      untraced_endpoints: [ "/api/v1/google_calendar_connection/callback" ]
+      untraced_endpoints: %w[
+        /api/v1/google_calendar_connection/callback
+        /api/v1/youtube_connection/callback
+      ]
     }
   }.freeze
 

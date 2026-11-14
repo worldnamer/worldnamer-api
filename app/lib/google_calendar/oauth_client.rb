@@ -11,7 +11,7 @@ module GoogleCalendar
     AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth".freeze
     TOKEN_ENDPOINT = URI("https://oauth2.googleapis.com/token").freeze
 
-    # The only scope ever requested: read events on calendars the user owns.
+    # The Calendar's scope, the default: read events on calendars the user owns.
     SCOPE = "https://www.googleapis.com/auth/calendar.events.owned.readonly".freeze
 
     # Seconds. A status check waits on Google while the browser waits on us, so give up well before the browser does.
@@ -33,10 +33,13 @@ module GoogleCalendar
       alias_method :to_s, :inspect
     end
 
-    def initialize(config = Rails.configuration.x.google_oauth)
+    # scope and redirect_uri default to the Calendar's. Another feature on the same Google client passes its own,
+    # so its consent screen and callback stay separate from the Calendar's.
+    def initialize(config = Rails.configuration.x.google_oauth, scope: SCOPE, redirect_uri: config.fetch(:redirect_uri))
       @client_id = config.fetch(:client_id)
       @client_secret = config.fetch(:client_secret)
-      @redirect_uri = config.fetch(:redirect_uri)
+      @scope = scope
+      @redirect_uri = redirect_uri
     end
 
     # The Google consent page to send the browser to. It holds the client id, the state and the PKCE challenge, never
@@ -46,7 +49,7 @@ module GoogleCalendar
         client_id: @client_id,
         redirect_uri: @redirect_uri,
         response_type: "code",
-        scope: SCOPE,
+        scope: @scope,
         state: state,
         code_challenge: code_challenge,
         code_challenge_method: "S256",

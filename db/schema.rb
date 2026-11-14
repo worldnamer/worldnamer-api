@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_07_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -284,6 +284,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_07_100001) do
     t.index ["username"], name: "index_users_on_username", unique: true
   end
 
+  create_table "youtube_connections", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.text "refresh_token"
+    t.datetime "connected_at", null: false
+    t.datetime "lost_at"
+    t.string "playlist_id"
+    t.string "playlist_title"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_youtube_connections_on_user_id", unique: true
+  end
+
+  create_table "youtube_oauth_states", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "state_digest", null: false
+    t.text "code_verifier"
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["state_digest"], name: "index_youtube_oauth_states_on_state_digest", unique: true
+    t.index ["user_id"], name: "index_youtube_oauth_states_on_user_id", unique: true
+  end
+
   add_foreign_key "google_calendar_connections", "users", on_delete: :cascade
   add_foreign_key "google_oauth_states", "users", on_delete: :cascade
   add_foreign_key "habit_completions", "habits", on_delete: :cascade
@@ -301,4 +324,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_07_100001) do
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "task_lists", "users", on_delete: :cascade
   add_foreign_key "tasks", "task_lists", on_delete: :cascade
+  add_foreign_key "youtube_connections", "users", on_delete: :cascade
+  add_foreign_key "youtube_oauth_states", "users", on_delete: :cascade
 end

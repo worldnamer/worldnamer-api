@@ -25,6 +25,21 @@ Rails.application.routes.draw do
         # GoogleCalendarConnections::EventsController#index. The caller's own events only; no ids in the path.
         resources :events, only: :index, module: :google_calendar_connections
       end
+      # Singular: each user has at most one. YouTubeConnectionsController#show.
+      resource :youtube_connection, only: :show do
+        # YouTubeConnections::AuthorizationsController#create
+        resource :authorization, only: :create, module: :youtube_connections
+        # YouTubeConnections::CallbacksController#show. Google redirects here; no bearer token.
+        resource :callback, only: :show, module: :youtube_connections
+        # YouTubeConnections::PlaylistsController#index. The caller's own playlists only.
+        resources :playlists, only: :index, module: :youtube_connections
+        # YouTubeConnections::PlaylistController#update. Singular: the caller's chosen playlist.
+        resource :playlist, only: :update, controller: "youtube_connections/playlist" do
+          # YouTubeConnections::PlaylistItemsController. Items of the chosen playlist only. format: false keeps a dot
+          # in an item id from being read as a format, so the whole segment is the id the controller checks.
+          resources :items, only: %i[index destroy], controller: "youtube_connections/playlist_items", format: false
+        end
+      end
       resources :task_lists, only: %i[index create update destroy] do
         resources :tasks, only: %i[index create update destroy]
         # DoneTasksController#destroy. Singular: no id in the path, it means this list's done tasks.

@@ -31,6 +31,8 @@ Rails.application.routes.draw do
         resource :authorization, only: :create, module: :youtube_connections
         # YoutubeConnections::CallbacksController#show. Google redirects here; no bearer token.
         resource :callback, only: :show, module: :youtube_connections
+        # YoutubeConnections::PlaylistsController#index. The caller's own playlists only.
+        resources :playlists, only: :index, module: :youtube_connections
       end
       resources :task_lists, only: %i[index create update destroy] do
         resources :tasks, only: %i[index create update destroy]

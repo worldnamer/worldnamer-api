@@ -35,8 +35,9 @@ Rails.application.routes.draw do
         resources :playlists, only: :index, module: :youtube_connections
         # YoutubeConnections::PlaylistController#update. Singular: the caller's chosen playlist.
         resource :playlist, only: :update, controller: "youtube_connections/playlist" do
-          # YoutubeConnections::PlaylistItemsController. Items of the chosen playlist only.
-          resources :items, only: :index, controller: "youtube_connections/playlist_items"
+          # YoutubeConnections::PlaylistItemsController. Items of the chosen playlist only. format: false keeps a dot
+          # in an item id from being read as a format, so the whole segment is the id the controller checks.
+          resources :items, only: %i[index destroy], controller: "youtube_connections/playlist_items", format: false
         end
       end
       resources :task_lists, only: %i[index create update destroy] do

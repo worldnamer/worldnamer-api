@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request do
   let!(:user) { create(:user, username: "john") }
   let(:callback_path) { "/api/v1/google_calendar_connection/callback" }
-  let(:cookie_name) { "wn_google_oauth" }
+  let(:cookie_name) { "wn_google_calendar_oauth" }
   let(:web_origin) { "http://localhost:5173" }
 
   def token_for(account = user)
@@ -11,7 +11,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
     response.parsed_body.fetch("access_token")
   end
 
-  # Starts a sign-in as the account, as the web app would. The test client keeps the wn_google_oauth cookie, like the
+  # Starts a sign-in as the account, as the web app would. The test client keeps the wn_google_calendar_oauth cookie, like the
   # browser. Returns the raw state.
   def start_sign_in(account = user)
     post "/api/v1/google_calendar_connection/authorization", headers: bearer(token_for(account))
@@ -51,7 +51,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
   describe "a successful sign-in" do
     it "exchanges the code with the user's own verifier and the client secret, stores the connection, and redirects connected" do
       state = start_sign_in
-      verifier = GoogleOauthState.find_by!(user: user).code_verifier
+      verifier = GoogleCalendarOauthState.find_by!(user: user).code_verifier
       exchange = stub_request(:post, google_token_endpoint)
         .with(body: hash_including(
           "grant_type" => "authorization_code", "code" => "the-code", "code_verifier" => verifier,
@@ -69,7 +69,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
       expect(connection.refresh_token).to eq("1//new-refresh")
       expect(connection.lost_at).to be_nil
       expect(stored_refresh_token_ciphertext(connection)).not_to include("1//new-refresh")
-      expect(GoogleOauthState.count).to eq(0)
+      expect(GoogleCalendarOauthState.count).to eq(0)
     end
 
     it "clears the cookie, is never cached and sends no referrer" do
@@ -129,7 +129,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
       expect_cookie_cleared
       expect_nothing_stored
       expect_google_not_called
-      expect(GoogleOauthState.count).to eq(0) # the sign-in is used up
+      expect(GoogleCalendarOauthState.count).to eq(0) # the sign-in is used up
     end
 
     it "redirects failed for any other error" do
@@ -163,7 +163,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
       expect_outcome("failed")
       expect_nothing_stored
       expect_google_not_called
-      expect(GoogleOauthState.count).to eq(1)
+      expect(GoogleCalendarOauthState.count).to eq(1)
     end
 
     it "fails for an unknown state even when the cookie matches it" do
@@ -188,7 +188,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
       expect_outcome("failed")
       expect_nothing_stored
       expect_google_not_called
-      expect(GoogleOauthState.count).to eq(0)
+      expect(GoogleCalendarOauthState.count).to eq(0)
     end
 
     it "fails when the callback is replayed" do
@@ -215,7 +215,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
       expect_outcome("failed")
       expect_nothing_stored
       expect_google_not_called
-      expect(GoogleOauthState.count).to eq(1)
+      expect(GoogleCalendarOauthState.count).to eq(1)
     end
 
     it "fails for the first state once a second start has replaced it" do
@@ -307,7 +307,7 @@ RSpec.describe "GET /api/v1/google_calendar_connection/callback", type: :request
       expect_outcome("failed")
       expect_nothing_stored
       expect_google_not_called
-      expect(GoogleOauthState.find_by(user: user)).to be_present
+      expect(GoogleCalendarOauthState.find_by(user: user)).to be_present
     end
   end
 

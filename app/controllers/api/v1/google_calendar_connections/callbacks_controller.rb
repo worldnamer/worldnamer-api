@@ -2,7 +2,7 @@ module Api
   module V1
     module GoogleCalendarConnections
       # Where Google sends the browser back after the consent screen. It is a top-level navigation from Google, so there
-      # is no bearer token: the user comes from the pending sign-in that the state belongs to, and the wn_google_oauth
+      # is no bearer token: the user comes from the pending sign-in that the state belongs to, and the wn_google_calendar_oauth
       # cookie proves this browser started it. This is the only unauthenticated action of the feature, which is why it
       # has a controller of its own.
       #
@@ -10,7 +10,7 @@ module Api
       # filter_parameter_logging, and out of traces because this path is an untraced endpoint of the Rack
       # instrumentation (config/initializers/opentelemetry.rb).
       class CallbacksController < ApplicationController
-        include GoogleOauthCookie
+        include GoogleCalendarOauthCookie
 
         # The only values the web app is ever told. It reads the real state from GET /google_calendar_connection.
         CONNECTED = "connected".freeze
@@ -22,7 +22,7 @@ module Api
         def show
           outcome = complete_sign_in
 
-          clear_google_oauth_cookie
+          clear_google_calendar_oauth_cookie
           response.cache_control.replace(no_store: true)
           # The page this lands on must not send the callback URL, with its code and state, as a Referer.
           response.set_header("Referrer-Policy", "no-referrer")
@@ -62,11 +62,11 @@ module Api
         # sign-in, which deletes it. A mismatch claims nothing, so it cannot use up another browser's sign-in.
         def claim_state
           state = params[:state]
-          cookie = google_oauth_cookie
+          cookie = google_calendar_oauth_cookie
           return nil unless state.is_a?(String) && cookie.is_a?(String) && state.present?
           return nil unless ActiveSupport::SecurityUtils.secure_compare(state, cookie)
 
-          GoogleOauthState.claim(state)
+          GoogleCalendarOauthState.claim(state)
         end
       end
     end

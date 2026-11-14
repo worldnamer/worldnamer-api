@@ -28,7 +28,7 @@ RSpec.describe "Code and state leak checks on the Google Calendar sign-in", type
     post "/api/v1/google_calendar_connection/authorization", headers: bearer(response.parsed_body.fetch("access_token"))
     state = URI.decode_www_form(URI(response.parsed_body.fetch("authorization_url")).query).to_h.fetch("state")
     secrets[:state] = state
-    secrets[:code_verifier] = GoogleOauthState.find_by!(user: user).code_verifier
+    secrets[:code_verifier] = GoogleCalendarOauthState.find_by!(user: user).code_verifier
     state
   end
 
@@ -96,7 +96,7 @@ RSpec.describe "Code and state leak checks on the Google Calendar sign-in", type
 
       # Non-vacuous: tracing is live in this example and recorded the start, and the callback really ran.
       expect(start_dump).to include("/api/v1/google_calendar_connection/authorization")
-      expect(start_dump).to include("google_oauth_states")
+      expect(start_dump).to include("google_calendar_oauth_states")
       expect(GoogleCalendarConnection.find_by!(user: user).refresh_token).to eq(refresh_token)
       expect_no_secret_in(start_dump)
       # The callback, its SQL and its call to Google left no span.

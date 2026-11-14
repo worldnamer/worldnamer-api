@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe "POST /api/v1/google_calendar_connection/authorization", type: :request do
   let!(:user) { create(:user, username: "john") }
   let(:path) { "/api/v1/google_calendar_connection/authorization" }
-  let(:cookie_name) { "wn_google_oauth" }
+  let(:cookie_name) { "wn_google_calendar_oauth" }
 
   def token_for(account = user)
     login(username: account.username)
@@ -36,7 +36,7 @@ RSpec.describe "POST /api/v1/google_calendar_connection/authorization", type: :r
     end
     expect(response).to have_http_status(:unauthorized)
 
-    expect(GoogleOauthState.count).to eq(0)
+    expect(GoogleCalendarOauthState.count).to eq(0)
     expect(raw_set_cookie).not_to include(cookie_name)
   end
 
@@ -63,14 +63,14 @@ RSpec.describe "POST /api/v1/google_calendar_connection/authorization", type: :r
   it "stores one pending sign-in for the caller, matching the URL's state and challenge" do
     start
 
-    row = GoogleOauthState.find_by!(user: user)
+    row = GoogleCalendarOauthState.find_by!(user: user)
     query = authorization_query
     expect(row.state_digest).to eq(Digest::SHA256.hexdigest(query["state"]))
     expect(query["code_challenge"]).to eq(row.code_challenge)
     expect(response.body).not_to include(row.code_verifier)
   end
 
-  it "sets the wn_google_oauth cookie to the URL's state with the agreed attributes" do
+  it "sets the wn_google_calendar_oauth cookie to the URL's state with the agreed attributes" do
     start
 
     line = cookie_line
@@ -91,7 +91,7 @@ RSpec.describe "POST /api/v1/google_calendar_connection/authorization", type: :r
     second_state = authorization_query["state"]
 
     expect(second_state).not_to eq(first_state)
-    expect(GoogleOauthState.where(user: user).pluck(:state_digest)).to eq([ Digest::SHA256.hexdigest(second_state) ])
+    expect(GoogleCalendarOauthState.where(user: user).pluck(:state_digest)).to eq([ Digest::SHA256.hexdigest(second_state) ])
   end
 
   it "is allowed while connected, and does not touch the connection" do
@@ -104,12 +104,12 @@ RSpec.describe "POST /api/v1/google_calendar_connection/authorization", type: :r
   it "never touches another user's pending sign-in" do
     other = create(:user, username: "bea")
     start(other)
-    other_digest = GoogleOauthState.find_by!(user: other).state_digest
+    other_digest = GoogleCalendarOauthState.find_by!(user: other).state_digest
 
     start(user)
 
-    expect(GoogleOauthState.find_by!(user: other).state_digest).to eq(other_digest)
-    expect(GoogleOauthState.count).to eq(2)
+    expect(GoogleCalendarOauthState.find_by!(user: other).state_digest).to eq(other_digest)
+    expect(GoogleCalendarOauthState.count).to eq(2)
   end
 
   it "does not call Google" do

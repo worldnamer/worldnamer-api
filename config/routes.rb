@@ -33,6 +33,8 @@ Rails.application.routes.draw do
         resource :callback, only: :show, module: :youtube_connections
         # YoutubeConnections::PlaylistsController#index. The caller's own playlists only.
         resources :playlists, only: :index, module: :youtube_connections
+        # YoutubeConnections::PlaylistController#update. Singular: the caller's chosen playlist.
+        resource :playlist, only: :update, controller: "youtube_connections/playlist"
       end
       resources :task_lists, only: %i[index create update destroy] do
         resources :tasks, only: %i[index create update destroy]

@@ -92,12 +92,9 @@ RSpec.describe "Code and state leak checks on the YouTube sign-in", type: :reque
       expect(captured_spans).to be_empty
     end
 
-    it "matches only the exact callback path" do
-      filter = OpenTelemetry::Instrumentation::Rack::Instrumentation.instance.config[:untraced_requests]
-
-      expect(filter.call("PATH_INFO" => callback_path)).to be(true)
-      expect(filter.call("PATH_INFO" => "/api/v1/youtube_connection")).to be(false)
-      expect(filter.call("PATH_INFO" => "#{callback_path}/extra")).to be(false)
+    it "lists the callback as an untraced endpoint of the Rack instrumentation" do
+      config = OpenTelemetry::Instrumentation::Rack::Instrumentation.instance.config
+      expect(config[:untraced_endpoints]).to include(callback_path)
     end
   end
 

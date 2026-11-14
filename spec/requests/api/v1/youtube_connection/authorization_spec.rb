@@ -103,11 +103,11 @@ RSpec.describe "POST /api/v1/youtube_connection/authorization", type: :request d
   end
 
   it "leaves the Calendar's pending sign-in, connection and cookie alone" do
-    calendar_state, = GoogleOauthState.start!(user)
+    calendar_state, = GoogleCalendarOauthState.start!(user)
     calendar = create(:google_calendar_connection, user: user)
 
     expect { start }.not_to change { calendar.reload.attributes }
-    expect(GoogleOauthState.find_by!(user: user).state_digest).to eq(GoogleOauthState.digest(calendar_state))
+    expect(GoogleCalendarOauthState.find_by!(user: user).state_digest).to eq(GoogleCalendarOauthState.digest(calendar_state))
     expect(raw_set_cookie).not_to include("wn_google_oauth")
   end
 

@@ -62,18 +62,18 @@ RSpec.describe YouTubeOauthState, type: :model do
 
   describe "independence from the Calendar sign-in" do
     it "cannot claim a Calendar sign-in's state, and leaves it pending" do
-      calendar_state, = GoogleOauthState.start!(user)
+      calendar_state, = GoogleCalendarOauthState.start!(user)
 
       expect(YouTubeOauthState.claim(calendar_state)).to be_nil
-      expect(GoogleOauthState.where(user: user).count).to eq(1)
+      expect(GoogleCalendarOauthState.where(user: user).count).to eq(1)
     end
 
     it "starting one leaves the other's pending sign-in alone" do
-      calendar_state, = GoogleOauthState.start!(user)
+      calendar_state, = GoogleCalendarOauthState.start!(user)
       youtube_state, = YouTubeOauthState.start!(user)
 
-      expect(GoogleOauthState.find_by!(user: user).state_digest).to eq(GoogleOauthState.digest(calendar_state))
-      expect(GoogleOauthState.claim(youtube_state)).to be_nil
+      expect(GoogleCalendarOauthState.find_by!(user: user).state_digest).to eq(GoogleCalendarOauthState.digest(calendar_state))
+      expect(GoogleCalendarOauthState.claim(youtube_state)).to be_nil
     end
   end
 

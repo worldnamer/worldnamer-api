@@ -211,7 +211,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
     end
 
     it "fails for a Calendar sign-in's state, even with the state in the YouTube cookie, and leaves it pending" do
-      calendar_state, = GoogleOauthState.start!(user)
+      calendar_state, = GoogleCalendarOauthState.start!(user)
       set_oauth_cookie(calendar_state)
 
       callback(code: "the-code", state: calendar_state)
@@ -219,7 +219,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
       expect_outcome("failed")
       expect_nothing_stored
       expect_google_not_called
-      expect(GoogleOauthState.where(user: user).count).to eq(1)
+      expect(GoogleCalendarOauthState.where(user: user).count).to eq(1)
     end
 
     it "fails for a state or code sent as an array" do

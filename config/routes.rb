@@ -25,6 +25,8 @@ Rails.application.routes.draw do
         # GoogleCalendarConnections::EventsController#index. The caller's own events only; no ids in the path.
         resources :events, only: :index, module: :google_calendar_connections
       end
+      # Singular: each user has at most one. YoutubeConnectionsController#show.
+      resource :youtube_connection, only: :show
       resources :task_lists, only: %i[index create update destroy] do
         resources :tasks, only: %i[index create update destroy]
         # DoneTasksController#destroy. Singular: no id in the path, it means this list's done tasks.

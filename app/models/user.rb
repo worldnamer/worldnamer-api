@@ -20,7 +20,8 @@ class User < ApplicationRecord
 
   # At most one Google Calendar link. No callbacks on it; the foreign key cascades in the database as well.
   has_one :google_calendar_connection, dependent: :delete
-  # At most one Google sign-in in progress. Same reasoning.
+  # At most one Google Calendar sign-in in progress. Same reasoning. The name predates YouTube; the YouTube sign-in is
+  # youtube_oauth_state below.
   has_one :google_oauth_state, dependent: :delete
 
   # At most one YouTube link, separate from the Calendar's, and at most one YouTube sign-in in progress. No callbacks

@@ -26,7 +26,11 @@ module WorldnamerTelemetry
     "OpenTelemetry::Instrumentation::Rack" => {
       allowed_request_headers: [],
       allowed_response_headers: [],
-      untraced_endpoints: [ "/api/v1/google_calendar_connection/callback" ]
+      untraced_endpoints: [ "/api/v1/google_calendar_connection/callback" ],
+      # YouTube's OAuth callback carries a code and state the same way, so it is not traced either. It is matched by
+      # a request filter, on the exact path as well, so that the endpoint list above keeps naming the Calendar's
+      # callback alone.
+      untraced_requests: ->(env) { env["PATH_INFO"] == "/api/v1/youtube_connection/callback" }
     }
   }.freeze
 

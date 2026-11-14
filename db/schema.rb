@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_200001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -33,17 +33,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_100001) do
     t.datetime "updated_at", null: false
     t.index ["state_digest"], name: "index_google_calendar_oauth_states_on_state_digest", unique: true
     t.index ["user_id"], name: "index_google_calendar_oauth_states_on_user_id", unique: true
-  end
-
-  create_table "google_oauth_states", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.string "state_digest", null: false
-    t.text "code_verifier"
-    t.datetime "expires_at", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["state_digest"], name: "index_google_oauth_states_on_state_digest", unique: true
-    t.index ["user_id"], name: "index_google_oauth_states_on_user_id", unique: true
   end
 
   create_table "habit_completions", force: :cascade do |t|
@@ -320,7 +309,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_100001) do
 
   add_foreign_key "google_calendar_connections", "users", on_delete: :cascade
   add_foreign_key "google_calendar_oauth_states", "users", on_delete: :cascade
-  add_foreign_key "google_oauth_states", "users", on_delete: :cascade
   add_foreign_key "habit_completions", "habits", on_delete: :cascade
   add_foreign_key "habits", "users", on_delete: :cascade
   add_foreign_key "recipe_ingredients", "recipes", on_delete: :cascade

@@ -1,6 +1,6 @@
 module Api
   module V1
-    module YoutubeConnections
+    module YouTubeConnections
       # Where Google sends the browser back after the YouTube consent screen. It is a top-level navigation from Google,
       # so there is no bearer token: the user comes from the pending YouTube sign-in that the state belongs to, and the
       # wn_youtube_oauth cookie proves this browser started it. This is the only unauthenticated action of the
@@ -10,7 +10,7 @@ module Api
       # filter_parameter_logging, and out of traces because the Rack instrumentation does not trace this path
       # (config/initializers/opentelemetry.rb).
       class CallbacksController < ApplicationController
-        include YoutubeOauthCookie
+        include YouTubeOauthCookie
 
         # The only values the web app is ever told. It reads the real state from GET /youtube_connection.
         CONNECTED = "connected".freeze
@@ -47,12 +47,12 @@ module Api
           code = params[:code]
           return FAILED unless code.is_a?(String) && code.present?
 
-          tokens = Youtube::Oauth.client.exchange_code(code: code, code_verifier: oauth_state.code_verifier)
+          tokens = YouTube::Oauth.client.exchange_code(code: code, code_verifier: oauth_state.code_verifier)
           # Without a refresh token the playlist cannot be read later, and without the scope it cannot be read at all
           # (the user may untick it on the consent screen).
-          return FAILED unless tokens.refresh_token && tokens.scopes.include?(Youtube::Oauth::SCOPE)
+          return FAILED unless tokens.refresh_token && tokens.scopes.include?(YouTube::Oauth::SCOPE)
 
-          YoutubeConnection.connect!(user_id: oauth_state.user_id, refresh_token: tokens.refresh_token)
+          YouTubeConnection.connect!(user_id: oauth_state.user_id, refresh_token: tokens.refresh_token)
           CONNECTED
         rescue GoogleCalendar::OauthClient::Error
           FAILED
@@ -66,7 +66,7 @@ module Api
           return nil unless state.is_a?(String) && cookie.is_a?(String) && state.present?
           return nil unless ActiveSupport::SecurityUtils.secure_compare(state, cookie)
 
-          YoutubeOauthState.claim(state)
+          YouTubeOauthState.claim(state)
         end
       end
     end

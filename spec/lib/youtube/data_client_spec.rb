@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Youtube::DataClient, type: :youtube_client do
+RSpec.describe YouTube::DataClient, type: :youtube_client do
   let(:access_token) { "ya29.spec-youtube-access" }
   let(:client) { described_class.new(access_token: access_token) }
   let(:auth_header) { { "Authorization" => "Bearer #{access_token}" } }
@@ -16,7 +16,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
 
   describe "#list_playlists" do
     it "asks for the user's own playlists, the first 50, with a fields filter and the token in a header" do
-      stub = stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT)
+      stub = stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT)
         .with(query: { "part" => "snippet", "mine" => "true", "maxResults" => "50", "fields" => "items(id,snippet/title)" },
           headers: auth_header)
         .to_return(youtube_json({ items: [ { id: "PLone", snippet: { title: "One" } }, { id: "PLtwo", snippet: { title: "Two" } } ] }))
@@ -26,7 +26,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
     end
 
     it "is empty when the user has no playlists" do
-      stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
+      stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
         .to_return(youtube_json({}))
 
       expect(client.list_playlists).to eq([])
@@ -43,7 +43,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
 
   describe "#list_playlist_items" do
     it "asks for the first 10 items of the playlist, with a fields filter, and returns them in order with the total" do
-      stub = stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
+      stub = stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
         .with(query: { "part" => "snippet", "playlistId" => "PLchosen", "maxResults" => "10",
           "fields" => "pageInfo/totalResults,items(id,snippet(title,position,resourceId/videoId))" }, headers: auth_header)
         .to_return(youtube_json({ pageInfo: { totalResults: 73 }, items: [
@@ -73,7 +73,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
     end
 
     it "encodes the playlist id as a query value" do
-      stub = stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
+      stub = stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
         .with(query: hash_including("playlistId" => "PL&id=x")).to_return(youtube_json({ items: [] }))
 
       expect(client.list_playlist_items("PL&id=x")).to eq(total_count: 0, items: [])
@@ -83,7 +83,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
 
   describe "#find_playlist_item" do
     it "asks for the one item with a fields filter and returns its playlist" do
-      stub = stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
+      stub = stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
         .with(query: { "part" => "snippet", "id" => "item0", "fields" => "items(id,snippet/playlistId)" }, headers: auth_header)
         .to_return(youtube_json({ items: [ { id: "item0", snippet: { playlistId: "PLchosen" } } ] }))
 
@@ -100,7 +100,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
 
   describe "#delete_playlist_item" do
     it "sends DELETE /youtube/v3/playlistItems with only the item id, and the token in a header" do
-      stub = stub_request(:delete, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
+      stub = stub_request(:delete, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT)
         .with(query: { "id" => "item0" }, headers: auth_header).to_return(status: 204, body: "")
 
       expect(client.delete_playlist_item("item0")).to be(true)
@@ -152,7 +152,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
       500 => "backendError"
     }.each do |status, reason|
       it "raise Error for a #{status}, with the status and Google's reason only" do
-        stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
+        stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
           .to_return(youtube_json(youtube_error_body(status, reason, message: "Leaky message Secret Title"), status: status))
 
         expect { client.list_playlists }.to raise_error(described_class::Error) { |error|
@@ -165,7 +165,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
     end
 
     it "drop a reason that is not a plain word" do
-      stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
+      stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
         .to_return(youtube_json(youtube_error_body(400, "Secret Title here"), status: 400))
 
       expect { client.list_playlists }.to raise_error(described_class::Error) { |error|
@@ -175,7 +175,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
     end
 
     it "raise Error for a timeout, with no underlying exception attached" do
-      stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({})).to_timeout
+      stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({})).to_timeout
 
       expect { client.list_playlists }.to raise_error(described_class::Error) { |error|
         expect(error.status).to be_nil
@@ -184,7 +184,7 @@ RSpec.describe Youtube::DataClient, type: :youtube_client do
     end
 
     it "raise Error for a success with an unreadable body, quoting none of it" do
-      stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
+      stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLISTS_ENDPOINT).with(query: hash_including({}))
         .to_return(status: 200, body: "not json Secret Title")
 
       expect { client.list_playlists }.to raise_error(described_class::Error) { |error|

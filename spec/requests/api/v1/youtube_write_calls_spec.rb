@@ -21,7 +21,7 @@ RSpec.describe "Outgoing calls of the YouTube endpoints", type: :request do
   end
 
   before do
-    stub_google_tokens(refresh_token: "1//yt", scope: Youtube::Oauth::SCOPE)
+    stub_google_tokens(refresh_token: "1//yt", scope: YouTube::Oauth::SCOPE)
     stub_youtube_playlists([ { id: "PLchosen01", title: "Chosen" } ])
     stub_youtube_playlist_items("PLchosen01", [ youtube_item(id: "item0", title: "A video", position: 0) ])
     stub_youtube_find_item("item0", "PLchosen01")

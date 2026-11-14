@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Youtube::Oauth do
+RSpec.describe YouTube::Oauth do
   it "asks for exactly the scope that manages the user's YouTube account" do
     expect(described_class::SCOPE).to eq("https://www.googleapis.com/auth/youtube")
   end

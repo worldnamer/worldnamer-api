@@ -2,7 +2,7 @@
 # token minted for this request only, and the one way a failure from Google is logged and answered.
 #
 # Every call here blocks the request's thread on Google: a token call, then one or two Data API calls.
-module YoutubeDataAccess
+module YouTubeDataAccess
   extend ActiveSupport::Concern
 
   included do
@@ -15,7 +15,7 @@ module YoutubeDataAccess
   # The access token lives in this client for this request only. Raises GoogleCalendar::OauthClient::InvalidGrant when
   # Google no longer accepts the stored token; the caller decides what a lost connection means for its answer.
   def youtube_data_client(connection)
-    Youtube::DataClient.new(access_token: connection.mint_access_token)
+    YouTube::DataClient.new(access_token: connection.mint_access_token)
   end
 
   # The class and HTTP status only: the message could name Google's reason, and titles are never logged.

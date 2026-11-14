@@ -46,7 +46,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
   end
 
   def expect_nothing_stored
-    expect(YoutubeConnection.count).to eq(0)
+    expect(YouTubeConnection.count).to eq(0)
   end
 
   def expect_google_not_called
@@ -56,7 +56,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
   describe "a successful sign-in" do
     it "exchanges the code with the user's verifier, the secret and the YouTube callback, and stores the connection" do
       state = start_sign_in
-      verifier = YoutubeOauthState.find_by!(user: user).code_verifier
+      verifier = YouTubeOauthState.find_by!(user: user).code_verifier
       exchange = stub_request(:post, google_token_endpoint)
         .with(body: hash_including(
           "grant_type" => "authorization_code", "code" => "the-code", "code_verifier" => verifier,
@@ -69,14 +69,14 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
 
       expect(exchange).to have_been_requested.once
       expect_outcome("connected")
-      connection = YoutubeConnection.find_by!(user: user)
+      connection = YouTubeConnection.find_by!(user: user)
       expect(connection.refresh_token).to eq("1//new-refresh")
       expect(connection.lost_at).to be_nil
       stored = ActiveRecord::Base.connection.select_value(
         "SELECT refresh_token FROM youtube_connections WHERE id = #{Integer(connection.id)}"
       )
       expect(stored).not_to include("1//new-refresh")
-      expect(YoutubeOauthState.count).to eq(0)
+      expect(YouTubeOauthState.count).to eq(0)
     end
 
     it "clears the cookie, is never cached and sends no referrer" do
@@ -98,11 +98,11 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
       callback(code: "the-code", state: state)
 
       expect_outcome("connected")
-      connection = YoutubeConnection.find_by!(user: user)
+      connection = YouTubeConnection.find_by!(user: user)
       expect(connection.refresh_token).to eq("1//reconnected")
       expect(connection.lost_at).to be_nil
       expect(connection.playlist_id).to eq("PLkept1")
-      expect(YoutubeConnection.count).to eq(1)
+      expect(YouTubeConnection.count).to eq(1)
     end
 
     it "leaves the Calendar connection alone" do
@@ -134,7 +134,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
       expect_cookie_cleared
       expect_nothing_stored
       expect_google_not_called
-      expect(YoutubeOauthState.count).to eq(0)
+      expect(YouTubeOauthState.count).to eq(0)
     end
 
     it "redirects failed for any other error" do
@@ -168,7 +168,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
       expect_outcome("failed")
       expect_nothing_stored
       expect_google_not_called
-      expect(YoutubeOauthState.count).to eq(1)
+      expect(YouTubeOauthState.count).to eq(1)
     end
 
     it "fails once the sign-in is more than ten minutes old" do
@@ -189,7 +189,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
       exchange = stub_youtube_tokens
       callback(code: "the-code", state: state)
       expect_outcome("connected")
-      YoutubeConnection.delete_all
+      YouTubeConnection.delete_all
 
       set_oauth_cookie(state)
       callback(code: "the-code", state: state)
@@ -285,7 +285,7 @@ RSpec.describe "GET /api/v1/youtube_connection/callback", type: :request do
 
       expect_outcome("failed")
       expect_nothing_stored
-      expect(YoutubeOauthState.find_by(user: user)).to be_present
+      expect(YouTubeOauthState.find_by(user: user)).to be_present
     end
   end
 

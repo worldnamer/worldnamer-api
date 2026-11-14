@@ -1,12 +1,12 @@
 module Api
   module V1
-    module YoutubeConnections
+    module YouTubeConnections
       # The caller's chosen playlist. Singular: each user has at most one.
       class PlaylistController < ApplicationController
         # Warden checks the Authorization: Bearer token. On failure Auth::FailureApp answers 401 "unauthenticated".
         # No only: list, so an action added later is protected by default.
         before_action :authenticate_user!
-        include YoutubeDataAccess
+        include YouTubeDataAccess
 
         # The body must hold { playlist: { id } } itself. Rails would otherwise wrap a bare { id } under "playlist",
         # named after this controller, and accept it.
@@ -35,7 +35,7 @@ module Api
         rescue GoogleCalendar::OauthClient::InvalidGrant
           # If the user reconnected while this request was running, mark_lost! leaves the new connection alone.
           connection.mark_lost! ? render_youtube_not_connected : render_youtube_unavailable
-        rescue GoogleCalendar::OauthClient::Error, Youtube::DataClient::Error => e
+        rescue GoogleCalendar::OauthClient::Error, YouTube::DataClient::Error => e
           log_youtube_failure(e)
           render_youtube_unavailable
         end

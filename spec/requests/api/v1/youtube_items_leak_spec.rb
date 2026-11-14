@@ -47,14 +47,14 @@ RSpec.describe "Leak checks on GET /api/v1/youtube_connection/playlist/items", t
   end
 
   it "keeps them out of a failure's log line" do
-    stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: hash_including({})).to_return(
+    stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: hash_including({})).to_return(
       youtube_json(youtube_error_body(500, "backendError", message: "#{title} #{access_token}"), status: 500)
     )
 
     log = request_logging { fetch_items }
 
     expect(response).to have_http_status(:bad_gateway)
-    expect(log).to include("YouTube unavailable: Youtube::DataClient::Error status=500")
+    expect(log).to include("YouTube unavailable: YouTube::DataClient::Error status=500")
     expect_none_of(sentinels, log)
   end
 
@@ -73,7 +73,7 @@ RSpec.describe "Leak checks on GET /api/v1/youtube_connection/playlist/items", t
   it "keeps them out of the outgoing Net::HTTP span for PlaylistItems: list" do
     received = nil
     with_local_http_server(->(_request) { local_json_response({ pageInfo: { totalResults: 1 }, items: items }) }) do |base_url, requests|
-      allow(Youtube::DataClient).to receive(:new).and_wrap_original do |original, **kwargs|
+      allow(YouTube::DataClient).to receive(:new).and_wrap_original do |original, **kwargs|
         original.call(**kwargs, base_url: URI("#{base_url}/youtube/v3/"))
       end
 
@@ -91,7 +91,7 @@ RSpec.describe "Leak checks on GET /api/v1/youtube_connection/playlist/items", t
   end
 
   it "keeps them out of a Sentry event for an error forced after the videos were fetched" do
-    allow_any_instance_of(Youtube::DataClient).to receive(:list_playlist_items).and_wrap_original do |original, *args|
+    allow_any_instance_of(YouTube::DataClient).to receive(:list_playlist_items).and_wrap_original do |original, *args|
       original.call(*args) # the videos really were fetched first
       raise "forced youtube items failure"
     end
@@ -109,16 +109,16 @@ RSpec.describe "Leak checks on GET /api/v1/youtube_connection/playlist/items", t
   end
 
   it "keeps them out of a Sentry event when a client error escapes unrescued, even if YouTube's body quotes them" do
-    stub_request(:get, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: hash_including({})).to_return(
+    stub_request(:get, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: hash_including({})).to_return(
       youtube_json(youtube_error_body(500, "backendError", message: "#{title} #{access_token}"), status: 500)
     )
     # Let the client's error escape instead of answering 502, so Sentry reports it. $! is the error being rescued.
-    allow_any_instance_of(Api::V1::YoutubeConnections::PlaylistItemsController)
+    allow_any_instance_of(Api::V1::YouTubeConnections::PlaylistItemsController)
       .to receive(:render_youtube_unavailable) { raise $! }
 
     begin
       fetch_items
-    rescue Youtube::DataClient::Error
+    rescue YouTube::DataClient::Error
       # see above
     end
 

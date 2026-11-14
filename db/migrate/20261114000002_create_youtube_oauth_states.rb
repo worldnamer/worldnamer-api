@@ -1,4 +1,4 @@
-class CreateYoutubeOauthStates < ActiveRecord::Migration[8.1]
+class CreateYouTubeOauthStates < ActiveRecord::Migration[8.1]
   def change
     create_table :youtube_oauth_states do |t|
       # One pending YouTube sign-in per user: starting again replaces it. on_delete: :cascade lets the database remove

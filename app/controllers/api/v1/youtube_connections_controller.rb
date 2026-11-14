@@ -1,6 +1,6 @@
 module Api
   module V1
-    class YoutubeConnectionsController < ApplicationController
+    class YouTubeConnectionsController < ApplicationController
       # Warden checks the Authorization: Bearer token. On failure Auth::FailureApp answers 401 "unauthenticated".
       # No only: list, so an action added later is protected by default.
       before_action :authenticate_user!

@@ -114,7 +114,7 @@ RSpec.describe "PUT /api/v1/youtube_connection/playlist", type: :request do
   it "answers 502 when the user reconnected while the rejected token was on its way" do
     connection = create(:youtube_connection, user: user, connected_at: 1.hour.ago)
     stub_request(:post, google_token_endpoint).to_return do
-      YoutubeConnection.connect!(user_id: connection.user_id, refresh_token: "1//after-reconnect")
+      YouTubeConnection.connect!(user_id: connection.user_id, refresh_token: "1//after-reconnect")
       { status: 400, body: { error: "invalid_grant" }.to_json }
     end
 

@@ -1,8 +1,8 @@
 module Api
   module V1
-    module YoutubeConnections
+    module YouTubeConnections
       class AuthorizationsController < ApplicationController
-        include YoutubeOauthCookie
+        include YouTubeOauthCookie
 
         # Warden checks the Authorization: Bearer token. On failure Auth::FailureApp answers 401 "unauthenticated".
         # The bearer token lives in the web app's memory, which a cross-site form or link cannot send, so this is also
@@ -13,8 +13,8 @@ module Api
         # sets the wn_youtube_oauth cookie, and returns Google's consent URL for the web app to navigate to. Allowed
         # while connected; a successful reconnect replaces the stored token and keeps the chosen playlist.
         def create
-          raw_state, oauth_state = YoutubeOauthState.start!(current_user)
-          url = Youtube::Oauth.client.authorization_url(state: raw_state, code_challenge: oauth_state.code_challenge)
+          raw_state, oauth_state = YouTubeOauthState.start!(current_user)
+          url = YouTube::Oauth.client.authorization_url(state: raw_state, code_challenge: oauth_state.code_challenge)
 
           set_youtube_oauth_cookie(raw_state)
           # The URL holds the state, so no cache or proxy may keep the response.

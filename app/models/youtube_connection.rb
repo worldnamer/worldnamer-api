@@ -3,7 +3,7 @@
 # connect! writes only the token and time columns, so reconnecting keeps the chosen playlist.
 #
 # playlist_id and playlist_title are the user's chosen playlist; the title is a snapshot from when it was chosen.
-class YoutubeConnection < ApplicationRecord
+class YouTubeConnection < ApplicationRecord
   include GoogleOauthConnection
 
   belongs_to :user

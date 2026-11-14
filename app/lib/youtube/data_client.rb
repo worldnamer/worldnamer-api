@@ -1,6 +1,6 @@
 require "net/http"
 
-module Youtube
+module YouTube
   # The few YouTube Data API v3 calls the playlist page needs, on plain Net::HTTP, made with one user's access token.
   #
   # The OAuth scope behind the token can also manage the user's videos, comments and subscriptions, so this class is

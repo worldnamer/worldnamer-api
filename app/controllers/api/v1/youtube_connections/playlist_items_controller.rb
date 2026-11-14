@@ -1,12 +1,12 @@
 module Api
   module V1
-    module YoutubeConnections
+    module YouTubeConnections
       # The videos in the caller's chosen playlist, and removing one of them from it.
       class PlaylistItemsController < ApplicationController
         # Warden checks the Authorization: Bearer token. On failure Auth::FailureApp answers 401 "unauthenticated".
         # No only: list, so an action added later is protected by default.
         before_action :authenticate_user!
-        include YoutubeDataAccess
+        include YouTubeDataAccess
 
         # A YouTube playlist item id. Checked before anything is sent to Google.
         ITEM_ID = /\A[A-Za-z0-9_=-]{1,128}\z/
@@ -30,7 +30,7 @@ module Api
           # If the user reconnected while this request was running, mark_lost! leaves the new connection alone, and
           # this request, made with the old token, has nothing to show.
           connection.mark_lost! ? render_answer("lost") : render_youtube_unavailable
-        rescue GoogleCalendar::OauthClient::Error, Youtube::DataClient::Error => e
+        rescue GoogleCalendar::OauthClient::Error, YouTube::DataClient::Error => e
           log_youtube_failure(e)
           render_youtube_unavailable
         end
@@ -56,7 +56,7 @@ module Api
         rescue GoogleCalendar::OauthClient::InvalidGrant
           # If the user reconnected while this request was running, mark_lost! leaves the new connection alone.
           connection.mark_lost! ? render_youtube_not_connected : render_youtube_unavailable
-        rescue Youtube::DataClient::Error => e
+        rescue YouTube::DataClient::Error => e
           # The item or the playlist is gone, or no longer the user's to read: nothing to remove.
           return render_not_found if playlist_unavailable?(e)
 
@@ -76,7 +76,7 @@ module Api
         # The videos, or nil when the playlist is gone or not readable. Other errors propagate.
         def fetch_videos(connection)
           youtube_data_client(connection).list_playlist_items(connection.playlist_id)
-        rescue Youtube::DataClient::Error => e
+        rescue YouTube::DataClient::Error => e
           raise unless playlist_unavailable?(e)
 
           nil

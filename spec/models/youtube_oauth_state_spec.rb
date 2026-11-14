@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe YoutubeOauthState, type: :model do
+RSpec.describe YouTubeOauthState, type: :model do
   let(:connection) { ActiveRecord::Base.connection }
   let(:columns) { connection.columns(:youtube_oauth_states).index_by(&:name) }
   let(:user) { create(:user) }
@@ -27,7 +27,7 @@ RSpec.describe YoutubeOauthState, type: :model do
 
   describe ".start!" do
     it "stores only the state's digest and the verifier as ciphertext, expiring in ten minutes" do
-      raw_state, row = YoutubeOauthState.start!(user)
+      raw_state, row = YouTubeOauthState.start!(user)
 
       expect(row.state_digest).to eq(Digest::SHA256.hexdigest(raw_state))
       dump = connection.select_all("SELECT * FROM youtube_oauth_states").to_a.inspect
@@ -37,26 +37,26 @@ RSpec.describe YoutubeOauthState, type: :model do
     end
 
     it "replaces the user's pending sign-in" do
-      YoutubeOauthState.start!(user)
-      second_state, = YoutubeOauthState.start!(user)
+      YouTubeOauthState.start!(user)
+      second_state, = YouTubeOauthState.start!(user)
 
-      expect(YoutubeOauthState.where(user: user).pluck(:state_digest)).to eq([ YoutubeOauthState.digest(second_state) ])
+      expect(YouTubeOauthState.where(user: user).pluck(:state_digest)).to eq([ YouTubeOauthState.digest(second_state) ])
     end
   end
 
   describe ".claim" do
     it "returns the row once and deletes it" do
-      raw_state, row = YoutubeOauthState.start!(user)
+      raw_state, row = YouTubeOauthState.start!(user)
 
-      expect(YoutubeOauthState.claim(raw_state)).to eq(row)
-      expect(YoutubeOauthState.claim(raw_state)).to be_nil
+      expect(YouTubeOauthState.claim(raw_state)).to eq(row)
+      expect(YouTubeOauthState.claim(raw_state)).to be_nil
     end
 
     it "deletes an expired row but returns nil for it" do
       row = create(:youtube_oauth_state, state: "old-state", expires_at: 1.second.ago)
 
-      expect(YoutubeOauthState.claim("old-state")).to be_nil
-      expect(YoutubeOauthState.exists?(row.id)).to be(false)
+      expect(YouTubeOauthState.claim("old-state")).to be_nil
+      expect(YouTubeOauthState.exists?(row.id)).to be(false)
     end
   end
 
@@ -64,13 +64,13 @@ RSpec.describe YoutubeOauthState, type: :model do
     it "cannot claim a Calendar sign-in's state, and leaves it pending" do
       calendar_state, = GoogleOauthState.start!(user)
 
-      expect(YoutubeOauthState.claim(calendar_state)).to be_nil
+      expect(YouTubeOauthState.claim(calendar_state)).to be_nil
       expect(GoogleOauthState.where(user: user).count).to eq(1)
     end
 
     it "starting one leaves the other's pending sign-in alone" do
       calendar_state, = GoogleOauthState.start!(user)
-      youtube_state, = YoutubeOauthState.start!(user)
+      youtube_state, = YouTubeOauthState.start!(user)
 
       expect(GoogleOauthState.find_by!(user: user).state_digest).to eq(GoogleOauthState.digest(calendar_state))
       expect(GoogleOauthState.claim(youtube_state)).to be_nil
@@ -82,8 +82,8 @@ RSpec.describe YoutubeOauthState, type: :model do
       first = create(:youtube_oauth_state)
       second = create(:youtube_oauth_state)
 
-      expect { first.user.destroy! }.to change(YoutubeOauthState, :count).by(-1)
-      expect { User.where(id: second.user_id).delete_all }.to change(YoutubeOauthState, :count).by(-1)
+      expect { first.user.destroy! }.to change(YouTubeOauthState, :count).by(-1)
+      expect { User.where(id: second.user_id).delete_all }.to change(YouTubeOauthState, :count).by(-1)
     end
   end
 end

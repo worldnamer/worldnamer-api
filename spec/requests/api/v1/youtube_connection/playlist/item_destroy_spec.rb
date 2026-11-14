@@ -169,7 +169,7 @@ RSpec.describe "DELETE /api/v1/youtube_connection/playlist/items/:id", type: :re
     connection = connect_with_playlist
     connection.update!(connected_at: 1.hour.ago)
     stub_request(:post, google_token_endpoint).to_return do
-      YoutubeConnection.connect!(user_id: connection.user_id, refresh_token: "1//after-reconnect")
+      YouTubeConnection.connect!(user_id: connection.user_id, refresh_token: "1//after-reconnect")
       { status: 400, body: { error: "invalid_grant" }.to_json }
     end
 

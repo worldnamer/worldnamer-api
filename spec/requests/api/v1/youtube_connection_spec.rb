@@ -80,7 +80,7 @@ RSpec.describe "GET /api/v1/youtube_connection", type: :request do
     connection = create(:youtube_connection, user: user)
     stub_google_token_server_error
 
-    expect { get_status }.not_to change { YoutubeConnection.find(connection.id).attributes }
+    expect { get_status }.not_to change { YouTubeConnection.find(connection.id).attributes }
     expect_answer("connected")
   end
 

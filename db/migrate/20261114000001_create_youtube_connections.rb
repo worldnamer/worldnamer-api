@@ -1,4 +1,4 @@
-class CreateYoutubeConnections < ActiveRecord::Migration[8.1]
+class CreateYouTubeConnections < ActiveRecord::Migration[8.1]
   def change
     create_table :youtube_connections do |t|
       # One connection per user. on_delete: :cascade lets the database remove it itself, even for a delete that skips

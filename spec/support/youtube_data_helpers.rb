@@ -1,6 +1,6 @@
-# Stubs for the YouTube Data API (Youtube::DataClient). WebMock refuses every request that is not stubbed, so an
+# Stubs for the YouTube Data API (YouTube::DataClient). WebMock refuses every request that is not stubbed, so an
 # example that never stubs an endpoint also proves it was not called.
-module YoutubeDataHelpers
+module YouTubeDataHelpers
   YOUTUBE_PLAYLISTS_ENDPOINT = "https://www.googleapis.com/youtube/v3/playlists".freeze
   YOUTUBE_PLAYLIST_ITEMS_ENDPOINT = "https://www.googleapis.com/youtube/v3/playlistItems".freeze
 
@@ -66,6 +66,6 @@ module YoutubeDataHelpers
 end
 
 RSpec.configure do |config|
-  config.include YoutubeDataHelpers, type: :request
-  config.include YoutubeDataHelpers, type: :youtube_client
+  config.include YouTubeDataHelpers, type: :request
+  config.include YouTubeDataHelpers, type: :youtube_client
 end

@@ -36,7 +36,7 @@ RSpec.describe "POST /api/v1/youtube_connection/authorization", type: :request d
     end
     expect(response).to have_http_status(:unauthorized)
 
-    expect(YoutubeOauthState.count).to eq(0)
+    expect(YouTubeOauthState.count).to eq(0)
     expect(raw_set_cookie).not_to include(cookie_name)
   end
 
@@ -64,7 +64,7 @@ RSpec.describe "POST /api/v1/youtube_connection/authorization", type: :request d
   it "stores one pending YouTube sign-in for the caller, matching the URL's state and challenge" do
     start
 
-    row = YoutubeOauthState.find_by!(user: user)
+    row = YouTubeOauthState.find_by!(user: user)
     query = authorization_query
     expect(row.state_digest).to eq(Digest::SHA256.hexdigest(query["state"]))
     expect(query["code_challenge"]).to eq(row.code_challenge)
@@ -92,7 +92,7 @@ RSpec.describe "POST /api/v1/youtube_connection/authorization", type: :request d
     second_state = authorization_query["state"]
 
     expect(second_state).not_to eq(first_state)
-    expect(YoutubeOauthState.where(user: user).pluck(:state_digest)).to eq([ Digest::SHA256.hexdigest(second_state) ])
+    expect(YouTubeOauthState.where(user: user).pluck(:state_digest)).to eq([ Digest::SHA256.hexdigest(second_state) ])
   end
 
   it "is allowed while connected, and does not touch the connection" do
@@ -114,12 +114,12 @@ RSpec.describe "POST /api/v1/youtube_connection/authorization", type: :request d
   it "never touches another user's pending sign-in" do
     other = create(:user, username: "bea")
     start(other)
-    other_digest = YoutubeOauthState.find_by!(user: other).state_digest
+    other_digest = YouTubeOauthState.find_by!(user: other).state_digest
 
     start(user)
 
-    expect(YoutubeOauthState.find_by!(user: other).state_digest).to eq(other_digest)
-    expect(YoutubeOauthState.count).to eq(2)
+    expect(YouTubeOauthState.find_by!(user: other).state_digest).to eq(other_digest)
+    expect(YouTubeOauthState.count).to eq(2)
   end
 
   it "does not call Google" do

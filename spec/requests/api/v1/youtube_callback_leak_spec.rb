@@ -20,7 +20,7 @@ RSpec.describe "Code and state leak checks on the YouTube sign-in", type: :reque
   let(:secrets) { { code: code, refresh_token: refresh_token, access_token: access_token, client_secret: client_secret } }
 
   before do
-    stub_google_tokens(access_token: access_token, refresh_token: refresh_token, scope: Youtube::Oauth::SCOPE)
+    stub_google_tokens(access_token: access_token, refresh_token: refresh_token, scope: YouTube::Oauth::SCOPE)
   end
 
   def start_sign_in
@@ -28,7 +28,7 @@ RSpec.describe "Code and state leak checks on the YouTube sign-in", type: :reque
     post "/api/v1/youtube_connection/authorization", headers: bearer(response.parsed_body.fetch("access_token"))
     state = URI.decode_www_form(URI(response.parsed_body.fetch("authorization_url")).query).to_h.fetch("state")
     secrets[:state] = state
-    secrets[:code_verifier] = YoutubeOauthState.find_by!(user: user).code_verifier
+    secrets[:code_verifier] = YouTubeOauthState.find_by!(user: user).code_verifier
     state
   end
 
@@ -45,7 +45,7 @@ RSpec.describe "Code and state leak checks on the YouTube sign-in", type: :reque
     it "filters the code and state from the callback's request line and parameters" do
       log = request_logging { complete_sign_in(start_sign_in) }
 
-      expect(YoutubeConnection.find_by!(user: user).refresh_token).to eq(refresh_token) # the sign-in worked
+      expect(YouTubeConnection.find_by!(user: user).refresh_token).to eq(refresh_token) # the sign-in worked
       expect(log).to include("Started GET \"#{callback_path}?code=[FILTERED]&state=[FILTERED]\"")
       expect(log).to match(/Parameters: \{.*"code" => "\[FILTERED\]".*"state" => "\[FILTERED\]"/)
       expect(log).to include("Redirected to http://localhost:5173/youtube?youtube=connected")
@@ -76,7 +76,7 @@ RSpec.describe "Code and state leak checks on the YouTube sign-in", type: :reque
       # Non-vacuous: tracing is live in this example and recorded the start, and the callback really ran.
       expect(start_dump).to include("/api/v1/youtube_connection/authorization")
       expect(start_dump).to include("youtube_oauth_states")
-      expect(YoutubeConnection.find_by!(user: user).refresh_token).to eq(refresh_token)
+      expect(YouTubeConnection.find_by!(user: user).refresh_token).to eq(refresh_token)
       expect_no_secret_in(start_dump)
       # The callback, its SQL and its call to Google left no span.
       expect(callback_spans).to be_empty
@@ -120,7 +120,7 @@ RSpec.describe "Code and state leak checks on the YouTube sign-in", type: :reque
 
     it "keeps them out of an event for an error forced while storing the connection" do
       state = start_sign_in
-      allow(YoutubeConnection).to receive(:connect!).and_raise(RuntimeError, "forced youtube store failure")
+      allow(YouTubeConnection).to receive(:connect!).and_raise(RuntimeError, "forced youtube store failure")
 
       begin
         complete_sign_in(state)

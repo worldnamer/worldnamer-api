@@ -44,14 +44,14 @@ RSpec.describe "Leak checks on DELETE /api/v1/youtube_connection/playlist/items/
   end
 
   it "keeps them out of a failure's log line" do
-    stub_request(:delete, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: { "id" => "item0" }).to_return(
+    stub_request(:delete, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: { "id" => "item0" }).to_return(
       youtube_json(youtube_error_body(500, "backendError", message: "#{playlist_title} #{access_token}"), status: 500)
     )
 
     log = request_logging { remove }
 
     expect(response).to have_http_status(:bad_gateway)
-    expect(log).to include("YouTube unavailable: Youtube::DataClient::Error status=500")
+    expect(log).to include("YouTube unavailable: YouTube::DataClient::Error status=500")
     expect_none_of(sentinels, log)
   end
 
@@ -76,7 +76,7 @@ RSpec.describe "Leak checks on DELETE /api/v1/youtube_connection/playlist/items/
       end
     end
     with_local_http_server(responder) do |base_url, requests|
-      allow(Youtube::DataClient).to receive(:new).and_wrap_original do |original, **kwargs|
+      allow(YouTube::DataClient).to receive(:new).and_wrap_original do |original, **kwargs|
         original.call(**kwargs, base_url: URI("#{base_url}/youtube/v3/"))
       end
 
@@ -95,7 +95,7 @@ RSpec.describe "Leak checks on DELETE /api/v1/youtube_connection/playlist/items/
   end
 
   it "keeps them out of a Sentry event for an error forced after the DELETE" do
-    allow_any_instance_of(Youtube::DataClient).to receive(:delete_playlist_item).and_wrap_original do |original, *args|
+    allow_any_instance_of(YouTube::DataClient).to receive(:delete_playlist_item).and_wrap_original do |original, *args|
       original.call(*args) # YouTube really removed the item first
       raise "forced youtube delete failure"
     end
@@ -113,15 +113,15 @@ RSpec.describe "Leak checks on DELETE /api/v1/youtube_connection/playlist/items/
   end
 
   it "keeps them out of a Sentry event when a client error escapes unrescued, even if YouTube's body quotes them" do
-    stub_request(:delete, YoutubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: { "id" => "item0" }).to_return(
+    stub_request(:delete, YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT).with(query: { "id" => "item0" }).to_return(
       youtube_json(youtube_error_body(500, "backendError", message: "#{playlist_title} #{access_token}"), status: 500)
     )
-    allow_any_instance_of(Api::V1::YoutubeConnections::PlaylistItemsController)
+    allow_any_instance_of(Api::V1::YouTubeConnections::PlaylistItemsController)
       .to receive(:render_youtube_unavailable) { raise $! }
 
     begin
       remove
-    rescue Youtube::DataClient::Error
+    rescue YouTube::DataClient::Error
       # see above
     end
 

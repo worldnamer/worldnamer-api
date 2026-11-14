@@ -100,7 +100,7 @@ RSpec.describe "GET /api/v1/youtube_connection/playlist/items", type: :request d
       stub_google_tokens
       stub_youtube_playlist_items_error(status, reason)
 
-      expect { fetch }.not_to change { YoutubeConnection.find(connection.id).attributes }
+      expect { fetch }.not_to change { YouTubeConnection.find(connection.id).attributes }
       expect(response).to have_http_status(:bad_gateway)
       expect(response.parsed_body).to match("error" => { "code" => "youtube_unavailable", "message" => a_kind_of(String) })
     end
@@ -136,7 +136,7 @@ RSpec.describe "GET /api/v1/youtube_connection/playlist/items", type: :request d
     connection = connect_with_playlist
     connection.update!(connected_at: 1.hour.ago)
     stub_request(:post, google_token_endpoint).to_return do
-      YoutubeConnection.connect!(user_id: connection.user_id, refresh_token: "1//after-reconnect")
+      YouTubeConnection.connect!(user_id: connection.user_id, refresh_token: "1//after-reconnect")
       { status: 400, body: { error: "invalid_grant" }.to_json }
     end
 

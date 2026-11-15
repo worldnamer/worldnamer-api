@@ -4,9 +4,9 @@ module YouTube
   # The few YouTube Data API v3 calls the playlist page needs, on plain Net::HTTP, made with one user's access token.
   #
   # The OAuth scope behind the token can also manage the user's videos, comments and subscriptions, so this class is
-  # deliberately the only way the app talks to YouTube, and it has exactly four public methods: three reads and the
+  # deliberately the only way the app talks to YouTube, and it has exactly five public methods: four reads and the
   # removal of one playlist item. There is no method for videos, channels or any other write, and a spec pins the list.
-  # Quota cost per call, out of a shared 10,000 units a day: each read 1 unit, a delete 50.
+  # Quota cost per call, out of a shared 10,000 units a day: each read 1 unit (a whole-playlist listing is one read per page of 50), a delete 50.
   #
   # The access token travels in the Authorization header, never in the URL, so it cannot reach a log line or a span
   # that records the request target. Each read asks Google, through fields=, for only the fields it uses.
@@ -28,6 +28,12 @@ module YouTube
     PLAYLISTS_FIELDS = "items(id,snippet/title)".freeze
     ITEMS_FIELDS = "pageInfo/totalResults,items(id,snippet(title,position,resourceId/videoId))".freeze
     ITEM_FIELDS = "items(id,snippet/playlistId)".freeze
+    ALL_ITEMS_FIELDS = "nextPageToken,items(snippet(title,resourceId/videoId))".freeze
+
+    # A whole-playlist listing reads at most this many pages of ALL_ITEMS_PAGE_SIZE, so a playlist that never ends
+    # cannot loop or spend quota without bound.
+    MAX_PAGES = 20
+    ALL_ITEMS_PAGE_SIZE = 50
 
     # A YouTube video id. Anything else from Google is dropped rather than turned into a link.
     VIDEO_ID = /\A[A-Za-z0-9_-]{11}\z/
@@ -71,6 +77,29 @@ module YouTube
       end
       total = body.dig("pageInfo", "totalResults")
       { total_count: total.is_a?(Integer) ? total : list.size, items: list }
+    end
+
+    # PlaylistItems: list for a whole playlist, 50 items a page by pageToken, up to MAX_PAGES pages (1,000 items).
+    # Returns [{ video_id:, title: }] in playlist order. Items whose video id is missing or not a valid video id are
+    # dropped (a deleted or private video has no usable id). Costs one quota unit per page.
+    def list_all_playlist_items(playlist_id)
+      videos = []
+      page_token = nil
+      MAX_PAGES.times do
+        query = { part: "snippet", playlistId: playlist_id, maxResults: ALL_ITEMS_PAGE_SIZE, fields: ALL_ITEMS_FIELDS }
+        query[:pageToken] = page_token if page_token
+        body = get_json("playlistItems", query)
+        items(body).each do |item|
+          snippet = item["snippet"].is_a?(Hash) ? item["snippet"] : {}
+          video_id = snippet.dig("resourceId", "videoId")
+          next unless video_id.is_a?(String) && video_id.match?(VIDEO_ID)
+
+          videos << { video_id: video_id, title: snippet["title"].to_s }
+        end
+        page_token = body["nextPageToken"]
+        break unless page_token.is_a?(String) && !page_token.empty?
+      end
+      videos
     end
 
     # PlaylistItems: list for one item id. Returns { id:, playlist_id: }, or nil when YouTube knows no such item.

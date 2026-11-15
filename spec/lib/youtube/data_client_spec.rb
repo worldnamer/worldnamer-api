@@ -6,11 +6,12 @@ RSpec.describe YouTube::DataClient, type: :youtube_client do
   let(:auth_header) { { "Authorization" => "Bearer #{access_token}" } }
 
   describe "public methods" do
-    # The scope behind the token could manage the user's videos, comments and subscriptions. These four, three reads
-    # and one playlist-item removal, are all the app may do with it.
-    it "are exactly the three reads and the playlist-item removal" do
+    # The scope behind the token could manage the user's videos, comments and subscriptions. These five, four reads
+    # (the whole-playlist listing is the fourth) and one playlist-item removal, are all the app may do with it.
+    it "are exactly the four reads and the playlist-item removal" do
       expect(described_class.public_instance_methods(false))
-        .to contain_exactly(:list_playlists, :list_playlist_items, :find_playlist_item, :delete_playlist_item)
+        .to contain_exactly(:list_playlists, :list_playlist_items, :list_all_playlist_items, :find_playlist_item,
+          :delete_playlist_item)
     end
   end
 
@@ -36,6 +37,79 @@ RSpec.describe YouTube::DataClient, type: :youtube_client do
       stub_youtube_playlists([])
 
       client.list_playlists
+
+      expect(a_request(:get, /#{Regexp.escape(access_token)}/)).not_to have_been_made
+    end
+  end
+
+  describe "#list_all_playlist_items" do
+    let(:fields) { "nextPageToken,items(snippet(title,resourceId/videoId))" }
+    let(:endpoint) { YouTubeDataHelpers::YOUTUBE_PLAYLIST_ITEMS_ENDPOINT }
+
+    def page(videos, next_token: nil)
+      items = videos.map { |id, title| { snippet: { title: title, resourceId: { videoId: id } } } }
+      body = { items: items }
+      body[:nextPageToken] = next_token if next_token
+      youtube_json(body)
+    end
+
+    it "reads 50 items a page with a fields filter and the token in a header, and follows nextPageToken to the end" do
+      query = { "part" => "snippet", "playlistId" => "PLchosen", "maxResults" => "50", "fields" => fields }
+      first = stub_request(:get, endpoint).with(query: query, headers: auth_header)
+        .to_return(page([ [ "aaaaaaaaaaa", "First" ], [ "bbbbbbbbbbb", "Second" ] ], next_token: "TOKEN2"))
+      second = stub_request(:get, endpoint).with(query: query.merge("pageToken" => "TOKEN2"), headers: auth_header)
+        .to_return(page([ [ "ccccccccccc", "Third" ] ]))
+
+      expect(client.list_all_playlist_items("PLchosen")).to eq([
+        { video_id: "aaaaaaaaaaa", title: "First" },
+        { video_id: "bbbbbbbbbbb", title: "Second" },
+        { video_id: "ccccccccccc", title: "Third" }
+      ])
+      expect(first).to have_been_requested.once
+      expect(second).to have_been_requested.once
+    end
+
+    it "is empty for an empty playlist" do
+      stub_request(:get, endpoint).with(query: hash_including({})).to_return(youtube_json({}))
+
+      expect(client.list_all_playlist_items("PLchosen")).to eq([])
+    end
+
+    it "drops items whose video id is missing or not a valid video id, and gives a missing title as empty" do
+      stub_request(:get, endpoint).with(query: hash_including({})).to_return(youtube_json({ items: [
+        { snippet: { title: "Good", resourceId: { videoId: "aaaaaaaaaaa" } } },
+        { snippet: { title: "Short", resourceId: { videoId: "abc" } } },
+        { snippet: { title: "Odd", resourceId: { videoId: "bbbb bbbbbb" } } },
+        { snippet: { title: "None" } },
+        { snippet: { resourceId: { videoId: "ccccccccccc" } } },
+        "not an item"
+      ] }))
+
+      expect(client.list_all_playlist_items("PLchosen")).to eq([
+        { video_id: "aaaaaaaaaaa", title: "Good" },
+        { video_id: "ccccccccccc", title: "" }
+      ])
+    end
+
+    it "stops after 20 pages even if Google keeps sending a next page token" do
+      stub = stub_request(:get, endpoint).with(query: hash_including({}))
+        .to_return(page([ [ "aaaaaaaaaaa", "Again" ] ], next_token: "FOREVER"))
+
+      expect(client.list_all_playlist_items("PLchosen").size).to eq(20)
+      expect(stub).to have_been_requested.times(20)
+    end
+
+    it "raises the client's error, with the status and reason and no body, when a page fails" do
+      stub_youtube_playlist_items_error(404, "playlistNotFound")
+
+      expect { client.list_all_playlist_items("PLgone") }
+        .to raise_error(YouTube::DataClient::Error) { |e| expect([ e.status, e.reason ]).to eq([ 404, "playlistNotFound" ]) }
+    end
+
+    it "never puts the token in the URL" do
+      stub_request(:get, endpoint).with(query: hash_including({})).to_return(page([]))
+
+      client.list_all_playlist_items("PLchosen")
 
       expect(a_request(:get, /#{Regexp.escape(access_token)}/)).not_to have_been_made
     end

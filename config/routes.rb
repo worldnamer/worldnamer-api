@@ -33,6 +33,9 @@ Rails.application.routes.draw do
         resource :callback, only: :show, module: :youtube_connections
         # YouTubeConnections::PlaylistsController#index. The caller's own playlists only.
         resources :playlists, only: :index, module: :youtube_connections
+        # YouTubeConnections::VideosController#index. The caller's own recorded videos and their transcript states; no
+        # ids in the path, and Google is never called.
+        resources :videos, only: :index, module: :youtube_connections
         # YouTubeConnections::PlaylistController#update. Singular: the caller's chosen playlist.
         resource :playlist, only: :update, controller: "youtube_connections/playlist" do
           # YouTubeConnections::PlaylistItemsController. Items of the chosen playlist only. format: false keeps a dot

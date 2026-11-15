@@ -6,5 +6,8 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   # Google's OAuth callback: the one-time authorization code and the state (this also covers code_verifier).
-  :code, :state
+  :code, :state,
+  # A video's transcript text, stored in transcripts.lines: it is third-party content and could be long, so it stays
+  # out of the SQL a debug-level log shows.
+  :lines
 ]

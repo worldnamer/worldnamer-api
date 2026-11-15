@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Transcripts::Client do
+RSpec.describe Transcripts::Client, type: :lib do
   let(:token) { "spec-transcripts-bearer-token" }
   let(:base_url) { "http://transcripts.test:8080" }
   let(:endpoint) { "#{base_url}/transcript" }
@@ -161,6 +161,71 @@ RSpec.describe Transcripts::Client do
       stub_service(json_response({ outcome: "failed", reason: "secret sauce #{token}" }, status: 502))
 
       expect(client.fetch(video_id).inspect).not_to include(token)
+    end
+  end
+
+  describe "the telemetry span" do
+    def fetch_spans
+      captured_spans.select { |span| span.name == "transcripts.fetch" }
+    end
+
+    it "leaves one client span per fetch with the outcome and a whole-number duration in milliseconds" do
+      stub_service(json_response({ outcome: "ok", lines: [ { text: "Hi", start: 0 } ] }))
+
+      client.fetch(video_id)
+
+      expect(fetch_spans.size).to eq(1)
+      span = fetch_spans.first
+      expect(span.kind).to eq(:client)
+      expect(span.attributes).to match(
+        "transcripts.outcome" => "done", "transcripts.duration_ms" => a_kind_of(Integer)
+      )
+      expect(span.attributes["transcripts.duration_ms"]).to be >= 0
+    end
+
+    it "adds the reason only when the fetch failed" do
+      stub_service(json_response({ outcome: "failed", reason: "blocked" }, status: 502))
+
+      client.fetch(video_id)
+
+      expect(fetch_spans.first.attributes).to include("transcripts.outcome" => "failed", "transcripts.reason" => "blocked")
+    end
+
+    it "records no reason for no captions" do
+      stub_service(json_response({ outcome: "no_captions" }))
+
+      client.fetch(video_id)
+
+      expect(fetch_spans.first.attributes).to match(
+        "transcripts.outcome" => "no_captions", "transcripts.duration_ms" => a_kind_of(Integer)
+      )
+    end
+
+    it "leaves the span's status unset, even for a failure, and for a call that could not be made" do
+      stub_request(:post, endpoint).to_raise(Errno::ECONNREFUSED)
+
+      client.fetch(video_id)
+
+      expect(fetch_spans.first.status.code).to eq(OpenTelemetry::Trace::Status::UNSET)
+      expect(fetch_spans.first.attributes).to include("transcripts.reason" => "unreachable")
+    end
+
+    it "leaves no span for an id that is refused without a call" do
+      client.fetch("not an id")
+
+      expect(fetch_spans).to be_empty
+    end
+
+    it "holds nothing but the three attributes: no video id, title, token or text" do
+      stub_service(json_response({ outcome: "ok", lines: [ { text: "SENTINEL-line-text", start: 0 } ] }))
+
+      client.fetch(video_id)
+
+      dump = dump_spans(fetch_spans)
+      expect(dump).to include("transcripts.fetch")
+      expect_none_of([ video_id, token, "SENTINEL-line-text" ], dump)
+      expect(fetch_spans.first.attributes.keys)
+        .to contain_exactly("transcripts.outcome", "transcripts.duration_ms")
     end
   end
 end

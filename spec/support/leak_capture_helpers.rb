@@ -37,4 +37,5 @@ end
 RSpec.configure do |config|
   config.include LeakCaptureHelpers, type: :request
   config.include LeakCaptureHelpers, type: :job
+  config.include LeakCaptureHelpers, type: :lib
 end

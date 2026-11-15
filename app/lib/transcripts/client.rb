@@ -33,10 +33,27 @@ module Transcripts
       "#<#{self.class.name}>"
     end
 
+    # Each fetch that is sent leaves one span, "transcripts.fetch", with the outcome, the reason (only for a failure) and
+    # how long it took in milliseconds. The span carries no video id, title, token or text, so it cannot leak any of
+    # them, and its status is left unset: a failed fetch is an expected result, not an error in this code.
     def fetch(video_id)
       # The id goes into the request body, so anything that is not a YouTube id is refused before it is sent.
       return failed("bad_response") unless video_id.is_a?(String) && video_id.match?(YouTube::DataClient::VIDEO_ID)
 
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      WorldnamerTelemetry.tracer.in_span("transcripts.fetch", kind: :client) do |span|
+        result = call(video_id)
+        span.set_attribute("transcripts.outcome", result.outcome)
+        span.set_attribute("transcripts.reason", result.reason) if result.reason
+        span.set_attribute("transcripts.duration_ms", ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round)
+        result
+      end
+    end
+
+    private
+
+    # Sends the request and turns whatever happens into a Result. Nothing escapes.
+    def call(video_id)
       read(post(video_id))
     rescue Net::ReadTimeout
       failed("timed_out")
@@ -48,8 +65,6 @@ module Transcripts
       # its message could quote part of the response.
       failed("bad_response")
     end
-
-    private
 
     def post(video_id)
       uri = URI.join(@base_url, "/transcript")

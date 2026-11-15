@@ -23,6 +23,8 @@ end
 
 RSpec.configure do |config|
   config.include TelemetryHelpers, type: :request
+  config.include TelemetryHelpers, type: :job
+  config.include TelemetryHelpers, type: :lib
 
   config.before(:each) { TelemetryHelpers.reset }
   config.after(:each) { TelemetryHelpers.reset }

@@ -29,6 +29,10 @@ class User < ApplicationRecord
   has_one :youtube_connection, dependent: :delete
   has_one :youtube_oauth_state, dependent: :delete
 
+  # The videos recorded from the user's chosen YouTube playlist. No callbacks on them; the foreign key cascades in the
+  # database as well.
+  has_many :videos, dependent: :delete_all
+
   # Devise lowercases and strips :username (case_insensitive_keys / strip_whitespace_keys in config/initializers/devise.rb)
   # before validation, so a plain uniqueness check is case-insensitive.
   validates :username, presence: true, uniqueness: true

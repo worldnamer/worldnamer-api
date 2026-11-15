@@ -34,6 +34,12 @@ module WorldnamerTelemetry
     }
   }.freeze
 
+  # The tracer for the app's own spans, as opposed to the ones the instrumentation libraries make. With tracing off (no
+  # Honeycomb key) it is a no-op tracer, so callers never check whether tracing is on.
+  def self.tracer
+    OpenTelemetry.tracer_provider.tracer("worldnamer-api")
+  end
+
   def self.configure_opentelemetry(span_processor)
     OpenTelemetry::SDK.configure do |c|
       c.service_name = "worldnamer-api"

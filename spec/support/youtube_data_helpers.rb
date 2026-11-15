@@ -68,4 +68,5 @@ end
 RSpec.configure do |config|
   config.include YouTubeDataHelpers, type: :request
   config.include YouTubeDataHelpers, type: :youtube_client
+  config.include YouTubeDataHelpers, type: :job
 end

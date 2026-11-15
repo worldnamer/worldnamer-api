@@ -42,4 +42,5 @@ end
 RSpec.configure do |config|
   config.include GoogleOauthHelpers, type: :request
   config.include GoogleOauthHelpers, type: :model
+  config.include GoogleOauthHelpers, type: :job
 end

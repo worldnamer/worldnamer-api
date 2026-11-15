@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_15_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_15_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -276,6 +276,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_000001) do
     t.index ["task_list_id"], name: "index_tasks_on_task_list_id"
   end
 
+  create_table "transcripts", force: :cascade do |t|
+    t.bigint "video_id", null: false
+    t.string "outcome"
+    t.string "reason"
+    t.jsonb "lines"
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["video_id"], name: "index_transcripts_on_video_id", unique: true
+    t.check_constraint "outcome::text = ANY (ARRAY['done'::character varying, 'no_captions'::character varying, 'failed'::character varying]::text[])", name: "transcripts_outcome_values"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "username", null: false
     t.string "encrypted_password", default: "", null: false
@@ -334,6 +347,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_000001) do
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "task_lists", "users", on_delete: :cascade
   add_foreign_key "tasks", "task_lists", on_delete: :cascade
+  add_foreign_key "transcripts", "videos", on_delete: :cascade
   add_foreign_key "videos", "users", on_delete: :cascade
   add_foreign_key "youtube_connections", "users", on_delete: :cascade
   add_foreign_key "youtube_oauth_states", "users", on_delete: :cascade

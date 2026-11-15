@@ -46,6 +46,10 @@ Rails.application.configure do
   # Append comments with runtime information tags to SQL queries in logs.
   config.active_record.query_log_tags_enabled = true
 
+  # Run jobs through Solid Queue, as production does, when the server is started with SOLID_QUEUE_IN_PUMA set (see
+  # config/puma.rb). Without it Rails' default adapter is kept and nothing here queues a job.
+  config.active_job.queue_adapter = :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"]
+
   # Highlight code that enqueued background job in logs.
   config.active_job.verbose_enqueue_logs = true
 

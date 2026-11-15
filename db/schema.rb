@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_200001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_15_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -284,6 +284,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_200001) do
     t.index ["username"], name: "index_users_on_username", unique: true
   end
 
+  create_table "videos", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "youtube_id", null: false
+    t.string "title", default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "youtube_id"], name: "index_videos_on_user_id_and_youtube_id", unique: true
+    t.check_constraint "youtube_id::text ~ '^[A-Za-z0-9_-]{11}$'::text", name: "videos_youtube_id_format"
+  end
+
   create_table "youtube_connections", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.text "refresh_token"
@@ -324,6 +334,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_200001) do
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "task_lists", "users", on_delete: :cascade
   add_foreign_key "tasks", "task_lists", on_delete: :cascade
+  add_foreign_key "videos", "users", on_delete: :cascade
   add_foreign_key "youtube_connections", "users", on_delete: :cascade
   add_foreign_key "youtube_oauth_states", "users", on_delete: :cascade
 end

@@ -20,6 +20,29 @@ class Transcript < ApplicationRecord
     LEASE.ago
   end
 
+  # Takes the right to fetch this video's transcript, in one statement each way, so two runs can never both hold it.
+  # No row yet: inserts one, with its lease starting now. A row whose fetch never finished and whose lease has run out
+  # (outcome null, started_at older than the cutoff): starts a new lease on it. Anything else (a fetch in progress, or
+  # a stored outcome of any kind) is left alone. Returns true when the caller now holds the video and false when not.
+  def self.claim(video_id)
+    now = Time.current
+    inserted = insert_all([ { video_id: video_id, started_at: now } ], unique_by: :video_id)
+    return true if inserted.rows.any?
+
+    where(video_id: video_id, outcome: nil).where(started_at: ...lease_cutoff)
+      .update_all(started_at: now, reason: nil, lines: nil, finished_at: nil, updated_at: now) == 1
+  end
+
+  # Stores a Transcripts::Client::Result on the video's unfinished row. Only the lines of a done result are kept. A
+  # row that already has an outcome is never overwritten.
+  def self.finish(video_id, result)
+    now = Time.current
+    where(video_id: video_id, outcome: nil).update_all(
+      outcome: result.outcome, reason: result.reason, lines: (result.outcome == "done" ? result.lines : nil),
+      finished_at: now, updated_at: now
+    )
+  end
+
   def state
     return outcome if outcome
     started_at > self.class.lease_cutoff ? "working" : "waiting"

@@ -92,6 +92,79 @@ RSpec.describe Transcript, type: :model do
     end
   end
 
+  describe ".claim" do
+    let(:video) { create(:video) }
+
+    it "inserts a row with no outcome and a lease starting now when the video has none, and returns true" do
+      expect(Transcript.claim(video.id)).to be(true)
+
+      row = Transcript.find_by!(video_id: video.id)
+      expect(row.outcome).to be_nil
+      expect(row.started_at).to be_within(5.seconds).of(Time.current)
+      expect(row.state).to eq("working")
+    end
+
+    it "refuses a second claim while the lease is current" do
+      Transcript.claim(video.id)
+
+      expect(Transcript.claim(video.id)).to be(false)
+    end
+
+    it "takes over an unfinished row whose lease has run out, starting a new lease" do
+      create(:transcript, :expired, video: video)
+
+      expect(Transcript.claim(video.id)).to be(true)
+      expect(video.transcript.reload.state).to eq("working")
+      expect(Transcript.claim(video.id)).to be(false)
+    end
+
+    it "never takes a row that has an outcome, however old" do
+      %i[done no_captions failed].each do |outcome|
+        transcript = create(:transcript, outcome, :expired)
+
+        expect(Transcript.claim(transcript.video_id)).to be(false)
+        expect(transcript.reload.outcome).to eq(outcome.to_s)
+      end
+    end
+
+    it "leaves one row per video" do
+      2.times { Transcript.claim(video.id) }
+
+      expect(Transcript.where(video_id: video.id).count).to eq(1)
+    end
+  end
+
+  describe ".finish" do
+    let(:video) { create(:video) }
+    let(:result_class) { Transcripts::Client::Result }
+
+    before { Transcript.claim(video.id) }
+
+    it "stores a done outcome with its lines and a finish time" do
+      lines = [ { "text" => "Hello", "start" => 0.5 } ]
+
+      Transcript.finish(video.id, result_class.new(outcome: "done", reason: nil, lines: lines))
+
+      row = video.transcript.reload
+      expect([ row.outcome, row.reason, row.lines ]).to eq([ "done", nil, lines ])
+      expect(row.finished_at).to be_present
+    end
+
+    it "stores a failure's reason and no lines, and no captions with neither" do
+      Transcript.finish(video.id, result_class.new(outcome: "failed", reason: "blocked", lines: [ { "text" => "x", "start" => 1 } ]))
+
+      row = video.transcript.reload
+      expect([ row.outcome, row.reason, row.lines ]).to eq([ "failed", "blocked", nil ])
+    end
+
+    it "does not overwrite a row that already has an outcome" do
+      Transcript.finish(video.id, result_class.new(outcome: "no_captions", reason: nil, lines: nil))
+      Transcript.finish(video.id, result_class.new(outcome: "failed", reason: "blocked", lines: nil))
+
+      expect(video.transcript.reload.outcome).to eq("no_captions")
+    end
+  end
+
   it "belongs to a video, which finds it" do
     transcript = create(:transcript)
 

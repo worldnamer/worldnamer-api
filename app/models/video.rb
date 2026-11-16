@@ -7,6 +7,7 @@ class Video < ApplicationRecord
 
   # At most one. No callbacks on it; the foreign key cascades in the database as well.
   has_one :transcript, dependent: :delete
+  has_one :summary, dependent: :delete
 
   validates :youtube_id, format: { with: YouTube::DataClient::VIDEO_ID }
 
@@ -15,6 +16,10 @@ class Video < ApplicationRecord
   # transcript row is waiting; a stored outcome is that outcome; an unfinished fetch is working while its lease is
   # current and waiting once it has run out. The reason is only ever set for a failed fetch. The transcript's lines are
   # never selected, so a long transcript is not read from the database. Call it on a scope such as user.videos.
+  #
+  # Each row ends with the summary's three values, from the same query: its state, text and reason. The state is nil
+  # unless the transcript is done (there is nothing to summarise yet); otherwise it is derived as Summary#state does it,
+  # with no summary row meaning waiting. The text is only set for a done summary and the reason only for a failed one.
   def self.with_states
     state = sanitize_sql_array([ <<~SQL.squish, Transcript.lease_cutoff ])
       CASE
@@ -25,9 +30,21 @@ class Video < ApplicationRecord
       END
     SQL
     reason = "CASE WHEN transcripts.outcome = 'failed' THEN transcripts.reason END"
+    summary_state = sanitize_sql_array([ <<~SQL.squish, Summary.lease_cutoff ])
+      CASE
+        WHEN transcripts.outcome IS DISTINCT FROM 'done' THEN NULL
+        WHEN summaries.id IS NULL THEN 'waiting'
+        WHEN summaries.outcome IS NOT NULL THEN summaries.outcome
+        WHEN summaries.started_at >= ? THEN 'working'
+        ELSE 'waiting'
+      END
+    SQL
+    summary_text = "CASE WHEN summaries.outcome = 'done' THEN summaries.summary_text END"
+    summary_reason = "CASE WHEN summaries.outcome = 'failed' THEN summaries.reason END"
 
-    left_joins(:transcript)
+    left_joins(:transcript, :summary)
       .order("videos.created_at DESC", "videos.id DESC")
-      .pluck("videos.youtube_id", "videos.title", Arel.sql(state), Arel.sql(reason))
+      .pluck("videos.youtube_id", "videos.title", Arel.sql(state), Arel.sql(reason),
+             Arel.sql(summary_state), Arel.sql(summary_text), Arel.sql(summary_reason))
   end
 end

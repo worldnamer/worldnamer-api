@@ -9,5 +9,8 @@ Rails.application.config.filter_parameters += [
   :code, :state,
   # A video's transcript text, stored in transcripts.lines: it is third-party content and could be long, so it stays
   # out of the SQL a debug-level log shows.
-  :lines
+  :lines,
+  # A video's summary, stored in summaries.summary_text: model output that could be long and has no use in the log, so
+  # it stays out of the SQL a debug-level log shows.
+  :summary_text
 ]

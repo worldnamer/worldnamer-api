@@ -7,7 +7,8 @@
 #
 # It then fetches transcripts for the videos still waiting, the newest ten at most per run and strictly one at a time
 # (the transcript service answers a second caller with "busy"). The listing and the fetching are separate phases: a
-# failed listing does not stop the fetching.
+# failed listing does not stop the fetching. Last of all it queues YouTubeSummariseJob, which summarises the transcripts
+# fetched so far.
 class YouTubePlaylistCheckJob < ApplicationJob
   # One run at a time. The semaphore lasts at most 30 minutes, which covers a run that is killed without releasing it.
   limits_concurrency to: 1, key: "youtube_playlist_check", duration: 30.minutes
@@ -20,6 +21,9 @@ class YouTubePlaylistCheckJob < ApplicationJob
       record_new_videos(connection)
     end
     fetch_waiting_transcripts
+    # Last, so that nothing above is held up by it, and on every run, so a transcript that finished since the last run
+    # is picked up. It runs in its own job and is discarded if a run is still going.
+    YouTubeSummariseJob.perform_later
   end
 
   private

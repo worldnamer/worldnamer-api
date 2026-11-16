@@ -43,6 +43,43 @@ RSpec.describe YouTubePlaylistCheckJob, type: :job do
     end
   end
 
+  describe "queueing the summaries" do
+    before do
+      stub_google_tokens
+      stub_listing([])
+    end
+
+    it "queues the summarise job on every run, with no arguments" do
+      configure_service
+
+      expect { described_class.perform_now }.to have_enqueued_job(YouTubeSummariseJob).with(no_args).exactly(:once)
+      expect { 2.times { described_class.perform_now } }.to have_enqueued_job(YouTubeSummariseJob).exactly(:twice)
+    end
+
+    it "queues it as the last thing a run does, after the fetching" do
+      configure_service
+      create(:video, user: user)
+      stub_request(:post, transcript_endpoint).to_return(service_answer)
+      order = []
+      allow(YouTubeSummariseJob).to receive(:perform_later) { order << :queued }
+      allow(Transcript).to receive(:finish).and_wrap_original { |original, *args| order << :fetched; original.call(*args) }
+
+      described_class.perform_now
+
+      expect(order).to eq(%i[fetched queued])
+    end
+
+    it "queues it when the listing failed, when there is no connection and when the transcript service is not configured" do
+      configure_service(url: nil)
+      stub_youtube_playlist_items_error(500, "backendError")
+
+      expect { described_class.perform_now }.to have_enqueued_job(YouTubeSummariseJob).once
+
+      connection.destroy
+      expect { described_class.perform_now }.to have_enqueued_job(YouTubeSummariseJob).once
+    end
+  end
+
   describe "recording videos" do
     before { stub_google_tokens(access_token: "ya29.job-access") }
 

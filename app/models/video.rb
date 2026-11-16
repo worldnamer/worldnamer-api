@@ -7,6 +7,7 @@ class Video < ApplicationRecord
 
   # At most one. No callbacks on it; the foreign key cascades in the database as well.
   has_one :transcript, dependent: :delete
+  has_one :summary, dependent: :delete
 
   validates :youtube_id, format: { with: YouTube::DataClient::VIDEO_ID }
 

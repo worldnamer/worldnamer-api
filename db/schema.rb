@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_15_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_16_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -257,6 +257,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_000002) do
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
   end
 
+  create_table "summaries", force: :cascade do |t|
+    t.bigint "video_id", null: false
+    t.string "outcome"
+    t.string "reason"
+    t.text "summary_text"
+    t.string "model"
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["video_id"], name: "index_summaries_on_video_id", unique: true
+    t.check_constraint "outcome::text = ANY (ARRAY['done'::character varying, 'nothing_to_summarise'::character varying, 'failed'::character varying]::text[])", name: "summaries_outcome_values"
+  end
+
   create_table "task_lists", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.string "name", limit: 100, default: "", null: false
@@ -286,7 +300,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_000002) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["video_id"], name: "index_transcripts_on_video_id", unique: true
-    t.check_constraint "outcome::text = ANY (ARRAY['done'::character varying, 'no_captions'::character varying, 'failed'::character varying]::text[])", name: "transcripts_outcome_values"
+    t.check_constraint "outcome::text = ANY (ARRAY['done'::character varying::text, 'no_captions'::character varying::text, 'failed'::character varying::text])", name: "transcripts_outcome_values"
   end
 
   create_table "users", force: :cascade do |t|
@@ -345,6 +359,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_000002) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "summaries", "videos", on_delete: :cascade
   add_foreign_key "task_lists", "users", on_delete: :cascade
   add_foreign_key "tasks", "task_lists", on_delete: :cascade
   add_foreign_key "transcripts", "videos", on_delete: :cascade

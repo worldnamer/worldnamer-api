@@ -166,4 +166,60 @@ RSpec.describe Summaries::Client, type: :lib do
       expect(client.summarise(text).inspect).not_to include(token)
     end
   end
+
+  describe "the telemetry span" do
+    def generate_spans
+      captured_spans.select { |span| span.name == "summaries.generate" }
+    end
+
+    it "leaves one client span per call with the outcome, model, token counts and a whole-number duration" do
+      stub_service(json_response(ok_body))
+
+      client.summarise(text)
+
+      expect(generate_spans.size).to eq(1)
+      span = generate_spans.first
+      expect(span.kind).to eq(:client)
+      expect(span.attributes).to match(
+        "summaries.outcome" => "done", "summaries.model" => "some-model", "summaries.tokens_in" => 120,
+        "summaries.tokens_out" => 30, "summaries.duration_ms" => a_kind_of(Integer)
+      )
+      expect(span.attributes["summaries.duration_ms"]).to be >= 0
+    end
+
+    it "adds the reason only when the call failed, and no model or token counts" do
+      stub_service(json_response({ outcome: "failed", reason: "timed_out" }, status: 502))
+
+      client.summarise(text)
+
+      expect(generate_spans.first.attributes).to match(
+        "summaries.outcome" => "failed", "summaries.reason" => "timed_out", "summaries.duration_ms" => a_kind_of(Integer)
+      )
+    end
+
+    it "leaves the span's status unset, even for a failure, and for a call that could not be made" do
+      stub_request(:post, endpoint).to_raise(Errno::ECONNREFUSED)
+
+      client.summarise(text)
+
+      expect(generate_spans.first.status.code).to eq(OpenTelemetry::Trace::Status::UNSET)
+      expect(generate_spans.first.attributes).to include("summaries.reason" => "unreachable")
+    end
+
+    it "leaves no span for a text that is refused without a call" do
+      client.summarise("  ")
+
+      expect(generate_spans).to be_empty
+    end
+
+    it "holds no id, title, text or token in any attribute" do
+      stub_service(json_response(ok_body(summary: "SENTINEL-summary-text")))
+
+      client.summarise("SENTINEL-sent-text")
+
+      dump = dump_spans(generate_spans)
+      expect(dump).to include("summaries.generate")
+      expect_none_of([ token, "SENTINEL-summary-text", "SENTINEL-sent-text" ], dump)
+    end
+  end
 end

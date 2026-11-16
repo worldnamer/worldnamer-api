@@ -37,7 +37,7 @@ RSpec.describe "Leak checks on summarising a transcript", type: :job do
 
     expect(stub).to have_been_requested.once
     expect(log).to include("UPDATE \"summaries\"") # the finish's own statement was logged, with the text filtered
-    expect(log).to match(/\["summary_text", "\[FILTERED\]"]/)
+    expect(log).to match(/\["summary_text", "\[FILTERED\]"\]/)
     expect(video.summary.reload.summary_text).to eq(summary_text)
     expect_none_of([ *secrets, video_title ], log)
   end
@@ -48,6 +48,7 @@ RSpec.describe "Leak checks on summarising a transcript", type: :job do
     YouTubeSummariseJob.perform_now
 
     expect(video.summary.reload.outcome).to eq("done")
+    expect(dump_spans).to include("summaries.generate") # the call really was traced
     expect_none_of([ *secrets, video_title, video.youtube_id ], dump_spans)
     expect_none_of(secrets, dump_sentry_events)
   end
@@ -63,6 +64,7 @@ RSpec.describe "Leak checks on summarising a transcript", type: :job do
     log = request_logging { YouTubeSummariseJob.perform_now }
 
     expect(log).to include("summary failed (RuntimeError)")
+    expect(dump_spans).to include("summaries.generate")
     expect_none_of(secrets, log)
     expect_none_of(secrets, dump_sentry_events)
     expect_none_of(secrets, dump_spans)
@@ -85,6 +87,7 @@ RSpec.describe "Leak checks on summarising a transcript", type: :job do
 
       row = video.reload.summary
       expect(row.outcome).to eq("failed")
+      expect(dump_spans).to include("summaries.generate")
       expect_none_of(secrets, [ row.reason, row.summary_text.inspect, row.model.inspect, log, dump_spans, dump_sentry_events ].join("\n"))
     end
   end

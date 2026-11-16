@@ -74,6 +74,7 @@ RSpec.describe YouTubeSummariseJob, type: :job do
       described_class.perform_now
 
       expect(stub).not_to have_been_requested
+      expect(captured_spans.map(&:name)).not_to include("summaries.generate")
       expect(video.summary.reload.outcome).to eq("nothing_to_summarise")
       expect(video.summary.finished_at).to be_present
     end

@@ -34,11 +34,25 @@ module Summaries
       "#<#{self.class.name}>"
     end
 
-    # A text that is not a non-blank string is refused before anything is sent.
+    # Each call that is sent leaves one span, "summaries.generate", with the outcome, the reason (only for a failure),
+    # the model and the token counts (only for a summary) and how long it took in milliseconds. The span carries no
+    # video id, title, token or text, so it cannot leak any of them, and its status is left unset: a failed call is an
+    # expected result, not an error in this code. A text that is not a non-blank string is refused before anything is
+    # sent, and leaves no span.
     def summarise(text)
       return failed("bad_response") unless text.is_a?(String) && text.present?
 
-      call(text)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      WorldnamerTelemetry.tracer.in_span("summaries.generate", kind: :client) do |span|
+        result = call(text)
+        span.set_attribute("summaries.outcome", result.outcome)
+        span.set_attribute("summaries.reason", result.reason) if result.reason
+        span.set_attribute("summaries.model", result.model) if result.model
+        span.set_attribute("summaries.tokens_in", result.tokens_in) if result.tokens_in
+        span.set_attribute("summaries.tokens_out", result.tokens_out) if result.tokens_out
+        span.set_attribute("summaries.duration_ms", ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round)
+        result
+      end
     end
 
     private

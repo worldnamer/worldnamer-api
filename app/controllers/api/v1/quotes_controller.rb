@@ -33,6 +33,20 @@ module Api
         head :no_content
       end
 
+      # GET /api/v1/quotes/today. The quote of the day for the caller, picked by a day index over the caller's quotes
+      # in id order. The index counts whole days since 1970-01-01 in the app's date, so it changes at local midnight
+      # and does not depend on the time of day. Null when the caller has no quotes.
+      def today
+        quotes = current_user.quotes.order(:id)
+        count = quotes.count
+        if count.zero?
+          render json: { quote: nil }
+        else
+          index = (Date.current - Date.new(1970, 1, 1)).to_i % count
+          render json: { quote: quote_json(quotes.offset(index).limit(1).first) }
+        end
+      end
+
       private
 
       # Only the fields the client shows. Other columns stay out of the response.

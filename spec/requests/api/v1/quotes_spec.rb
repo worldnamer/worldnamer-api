@@ -24,6 +24,20 @@ RSpec.describe "/api/v1/quotes", type: :request do
       expect_unauthenticated
     end
 
+    it "returns 401 unauthenticated with no token on every quotes endpoint" do
+      get "/api/v1/quotes"
+      expect_unauthenticated
+
+      post "/api/v1/quotes", params: { quote: { text: "No token", author: nil } }, as: :json
+      expect_unauthenticated
+
+      delete "/api/v1/quotes/1"
+      expect_unauthenticated
+
+      get "/api/v1/quotes/today"
+      expect_unauthenticated
+    end
+
     it "returns an empty list when there are no quotes" do
       get "/api/v1/quotes", headers: { "Authorization" => "Bearer #{token_for}" }
 
@@ -163,6 +177,63 @@ RSpec.describe "/api/v1/quotes", type: :request do
 
       delete "/api/v1/quotes/#{missing_id}", headers: { "Authorization" => "Bearer #{token_for}" }
       expect_not_found
+    end
+  end
+
+  describe "GET /api/v1/quotes/today" do
+    it "returns a null quote when there are no quotes" do
+      get "/api/v1/quotes/today", headers: { "Authorization" => "Bearer #{token_for}" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq("quote" => nil)
+    end
+
+    it "returns the quote at the day's index and moves to the next one each day" do
+      first = create(:quote, user: user, text: "One", author: nil)
+      second = create(:quote, user: user, text: "Two", author: nil)
+      third = create(:quote, user: user, text: "Three", author: nil)
+
+      {
+        Time.utc(2026, 11, 19, 12) => second,
+        Time.utc(2026, 11, 20, 12) => third,
+        Time.utc(2026, 11, 21, 12) => first
+      }.each do |time, expected|
+        travel_to time do
+          get "/api/v1/quotes/today", headers: { "Authorization" => "Bearer #{token_for}" }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("quote" => quote_json(expected))
+        end
+      end
+    end
+
+    it "returns the same quote at the start and the end of the day" do
+      create(:quote, user: user, text: "One", author: nil)
+      create(:quote, user: user, text: "Two", author: nil)
+      create(:quote, user: user, text: "Three", author: nil)
+
+      picked = [ Time.utc(2026, 11, 19, 0, 0, 1), Time.utc(2026, 11, 19, 23, 59, 59) ].map do |time|
+        travel_to time do
+          get "/api/v1/quotes/today", headers: { "Authorization" => "Bearer #{token_for}" }
+
+          expect(response).to have_http_status(:ok)
+          response.parsed_body.fetch("quote")
+        end
+      end
+
+      expect(picked.first).to be_present
+      expect(picked.last).to eq(picked.first)
+    end
+
+    it "picks only from the caller's quotes" do
+      other = create(:user, username: "other")
+      create(:quote, user: other, text: "Not John's", author: nil)
+      mine = create(:quote, user: user, text: "John's", author: nil)
+
+      get "/api/v1/quotes/today", headers: { "Authorization" => "Bearer #{token_for}" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq("quote" => quote_json(mine))
     end
   end
 

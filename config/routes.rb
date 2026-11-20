@@ -53,8 +53,11 @@ Rails.application.routes.draw do
         # RecipeTaskListsController#create. Singular: no id in the path, it means the task list made from this recipe.
         resource :task_list, only: :create, controller: :recipe_task_lists
       end
-      # QuotesController#index, #create and #destroy. The caller's own quotes only.
-      resources :quotes, only: %i[index create destroy]
+      # QuotesController#index, #create, #destroy and #today. The caller's own quotes only.
+      resources :quotes, only: %i[index create destroy] do
+        # QuotesController#today. Collection route: the quote of the day, with no id in the path.
+        get :today, on: :collection
+      end
       resources :habits, only: %i[index create destroy] do
         # /habits/:habit_id/completions/:date. param: :date names the segment :date instead of :id.
         resources :completions, only: %i[update destroy], param: :date

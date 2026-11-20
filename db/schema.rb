@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_16_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_19_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -49,6 +49,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_16_000001) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id"], name: "index_habits_on_user_id"
+  end
+
+  create_table "quotes", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "text", limit: 500, null: false
+    t.string "author", limit: 100, default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_quotes_on_user_id"
   end
 
   create_table "recipe_ingredients", force: :cascade do |t|
@@ -348,6 +357,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_16_000001) do
   add_foreign_key "google_calendar_oauth_states", "users", on_delete: :cascade
   add_foreign_key "habit_completions", "habits", on_delete: :cascade
   add_foreign_key "habits", "users", on_delete: :cascade
+  add_foreign_key "quotes", "users", on_delete: :cascade
   add_foreign_key "recipe_ingredients", "recipes", on_delete: :cascade
   add_foreign_key "recipes", "users", on_delete: :cascade
   add_foreign_key "refresh_tokens", "users", on_delete: :cascade

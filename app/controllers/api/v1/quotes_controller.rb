@@ -26,6 +26,13 @@ module Api
         end
       end
 
+      # DELETE /api/v1/quotes/:id. Someone else's quote and a missing one get the same 404, so existence is not revealed.
+      # destroy! (not delete) so the model's callbacks run.
+      def destroy
+        current_user.quotes.find(params[:id]).destroy!
+        head :no_content
+      end
+
       private
 
       # Only the fields the client shows. Other columns stay out of the response.

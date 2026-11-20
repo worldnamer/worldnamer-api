@@ -140,6 +140,32 @@ RSpec.describe "/api/v1/quotes", type: :request do
     end
   end
 
+  describe "DELETE /api/v1/quotes/:id" do
+    it "deletes the caller's quote and answers 204" do
+      quote = create(:quote, user: user, text: "Gone", author: nil)
+
+      delete "/api/v1/quotes/#{quote.id}", headers: { "Authorization" => "Bearer #{token_for}" }
+
+      expect(response).to have_http_status(:no_content)
+      expect(Quote.exists?(quote.id)).to be false
+    end
+
+    it "answers the same 404 for someone else's quote and a missing one" do
+      other = create(:user, username: "other")
+      other_quote = create(:quote, user: other, text: "Not John's", author: nil)
+      missing = create(:quote, user: user, text: "Already gone", author: nil)
+      missing_id = missing.id
+      missing.destroy!
+
+      delete "/api/v1/quotes/#{other_quote.id}", headers: { "Authorization" => "Bearer #{token_for}" }
+      expect_not_found
+      expect(Quote.exists?(other_quote.id)).to be true
+
+      delete "/api/v1/quotes/#{missing_id}", headers: { "Authorization" => "Bearer #{token_for}" }
+      expect_not_found
+    end
+  end
+
   private
 
   def quote_json(quote)

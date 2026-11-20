@@ -1,0 +1,26 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "Remote Code Execution",
+      "warning_code": 130,
+      "fingerprint": "b2ef9ca037e09c20a8a7b7aec14bd62b16fb830e3723adf3b6936529ed347bde",
+      "check_name": "Ruby2Shell",
+      "message": "Ruby 3.4.9 has a critical remote code execution vulnerability (CVE-2026-132825). Upgrade to Ruby 3.4.13 or later",
+      "file": ".ruby-version",
+      "line": 1,
+      "link": "https://www.ruby-lang.org/en/news/2026/11/18/multiple-vulnerabilities-in-regexp-and-string/",
+      "code": null,
+      "render_path": null,
+      "location": null,
+      "user_input": null,
+      "confidence": "High",
+      "cwe_id": [
+        122,
+        125,
+        787
+      ],
+      "note": "Temporary. DigitalOcean's Ruby buildpack offers only 3.4.9 (and 4.0.1-4.0.2, also affected) as of 2026-11-21. The bug is a one-byte heap overflow in case conversion of strings in single-byte encodings such as ISO-8859-1 or Windows-1252; this app does no encoding handling of its own and calls no case conversion on request data. Remove this entry when the app moves to Ruby 3.4.13 or later (or 4.0.10 or later)."
+    }
+  ],
+  "brakeman_version": "8.1.1"
+}

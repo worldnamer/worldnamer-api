@@ -68,6 +68,78 @@ RSpec.describe "/api/v1/quotes", type: :request do
     end
   end
 
+  describe "POST /api/v1/quotes" do
+    it "creates a quote for the caller and answers 201 with its id, text and author" do
+      post "/api/v1/quotes",
+           params: { quote: { text: "  Stay  ", author: "Me" } },
+           headers: { "Authorization" => "Bearer #{token_for}" },
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      quote = user.quotes.find_by!(text: "Stay")
+      expect(response.parsed_body).to eq("quote" => { "id" => quote.id, "text" => "Stay", "author" => "Me" })
+    end
+
+    it "takes the owner from the token, not from the body" do
+      other = create(:user, username: "other")
+
+      post "/api/v1/quotes",
+           params: { quote: { text: "Mine", author: nil, user_id: other.id, id: 9999 } },
+           headers: { "Authorization" => "Bearer #{token_for}" },
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      quote = user.quotes.find_by!(text: "Mine")
+      expect(quote.id).not_to eq(9999)
+      expect(response.parsed_body.fetch("quote").fetch("id")).to eq(quote.id)
+      expect(other.quotes.find_by(text: "Mine")).to be_nil
+    end
+
+    it "answers 422 validation_failed with the message when the text is blank" do
+      post "/api/v1/quotes",
+           params: { quote: { text: "  ", author: "Me" } },
+           headers: { "Authorization" => "Bearer #{token_for}" },
+           as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body).to eq(
+        "error" => { "code" => "validation_failed", "message" => "Text can't be blank." }
+      )
+    end
+
+    it "answers 422 when the text or the author is too long" do
+      post "/api/v1/quotes",
+           params: { quote: { text: "a" * 501, author: "Me" } },
+           headers: { "Authorization" => "Bearer #{token_for}" },
+           as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body).to eq(
+        "error" => { "code" => "validation_failed", "message" => "Text is too long (maximum is 500 characters)." }
+      )
+
+      post "/api/v1/quotes",
+           params: { quote: { text: "Fine", author: "a" * 101 } },
+           headers: { "Authorization" => "Bearer #{token_for}" },
+           as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body).to eq(
+        "error" => { "code" => "validation_failed", "message" => "Author is too long (maximum is 100 characters)." }
+      )
+    end
+
+    it "answers 400 bad_request when the quote key is missing" do
+      post "/api/v1/quotes",
+           params: {},
+           headers: { "Authorization" => "Bearer #{token_for}" },
+           as: :json
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body.dig("error", "code")).to eq("bad_request")
+    end
+  end
+
   private
 
   def quote_json(quote)

@@ -15,6 +15,17 @@ module Api
         render json: { quotes: quotes }
       end
 
+      # POST /api/v1/quotes. The owner comes from the token, never from the body: params.expect permits only text and
+      # author, so user_id and id in the body are dropped.
+      def create
+        quote = current_user.quotes.build(params.expect(quote: [ :text, :author ]))
+        if quote.save
+          render json: { quote: quote_json(quote) }, status: :created
+        else
+          render_error "validation_failed", "#{quote.errors.full_messages.first}.", :unprocessable_content
+        end
+      end
+
       private
 
       # Only the fields the client shows. Other columns stay out of the response.

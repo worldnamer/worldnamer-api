@@ -11,6 +11,9 @@ class User < ApplicationRecord
   # so a deleted user's completions go through that cascade too.
   has_many :habits, dependent: :delete_all
 
+  # Quotes have no callbacks either; the foreign key cascades in the database as well.
+  has_many :quotes, dependent: :delete_all
+
   # Lists have no callbacks either; the foreign key cascades in the database as well.
   has_many :task_lists, dependent: :delete_all
 

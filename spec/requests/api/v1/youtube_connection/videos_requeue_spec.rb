@@ -1,6 +1,8 @@
 require "rails_helper"
 
 RSpec.describe "POST /api/v1/youtube_connection/videos/:youtube_id/requeue", type: :request do
+  before { Api::V1::YouTubeConnections::VideosController::RATE_LIMIT_STORE.clear }
+
   let!(:user) { create(:user, username: "john") }
 
   def token_for(account = user)
@@ -110,5 +112,34 @@ RSpec.describe "POST /api/v1/youtube_connection/videos/:youtube_id/requeue", typ
 
     expect(logged).not_to be_empty
     expect_none_of([ "SENTINEL-transcript-text", "SENTINEL-summary-text", token ], logged)
+  end
+
+  it "answers 429 rate_limited once a user has requeued 30 times within an hour" do
+    create(:video, user: user, youtube_id: "waitingnone")
+    headers = bearer(token_for)
+
+    30.times do
+      requeue("waitingnone", headers)
+      expect(response).to have_http_status(:ok)
+    end
+
+    requeue("waitingnone", headers)
+
+    expect(response).to have_http_status(:too_many_requests)
+    expect(response.parsed_body).to eq("error" => { "code" => "rate_limited", "message" => "Too many requeues. Try again later." })
+    expect(response.headers["Retry-After"]).to eq("3600")
+  end
+
+  it "counts requeues per user, so one user's limit does not stop another" do
+    other = create(:user, username: "other")
+    create(:video, user: user, youtube_id: "waitingnone")
+    create(:video, user: other, youtube_id: "otherwaitin")
+    headers = bearer(token_for)
+
+    31.times { requeue("waitingnone", headers) }
+    expect(response).to have_http_status(:too_many_requests)
+
+    requeue("otherwaitin", bearer(token_for(other)))
+    expect(response).to have_http_status(:ok)
   end
 end

@@ -40,6 +40,25 @@ module WorldnamerTelemetry
     OpenTelemetry.tracer_provider.tracer("worldnamer-api")
   end
 
+  # Solid Queue's dispatcher and workers poll the database every second from their own threads, outside any request or
+  # job, so each poll (its SELECT, the BEGIN and COMMIT around it, the heartbeat UPDATE) is a database span with no
+  # parent. That was about 283k events a day against Honeycomb's monthly cap, with nothing in it worth reading. This
+  # sampler drops a database span that starts a trace; its children are dropped with it by the parent-based wrapper.
+  # Database work inside a request or an ActiveJob perform span always has that span as its parent, so it is kept.
+  class RootDatabaseSpanSampler
+    def should_sample?(trace_id:, parent_context:, links:, name:, kind:, attributes:)
+      decision = attributes&.key?("db.system") ? OpenTelemetry::SDK::Trace::Samplers::Decision::DROP : OpenTelemetry::SDK::Trace::Samplers::Decision::RECORD_AND_SAMPLE
+      OpenTelemetry::SDK::Trace::Samplers::Result.new(
+        decision: decision,
+        tracestate: OpenTelemetry::Trace.current_span(parent_context).context.tracestate
+      )
+    end
+
+    def description
+      "RootDatabaseSpanSampler"
+    end
+  end
+
   def self.configure_opentelemetry(span_processor)
     OpenTelemetry::SDK.configure do |c|
       c.service_name = "worldnamer-api"
@@ -47,6 +66,8 @@ module WorldnamerTelemetry
       c.add_span_processor(span_processor)
       c.use_all(INSTRUMENTATION_OPTIONS)
     end
+    OpenTelemetry.tracer_provider.sampler =
+      OpenTelemetry::SDK::Trace::Samplers.parent_based(root: RootDatabaseSpanSampler.new)
   end
 end
 

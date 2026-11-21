@@ -47,4 +47,24 @@ class Video < ApplicationRecord
       .pluck("videos.youtube_id", "videos.title", Arel.sql(state), Arel.sql(reason),
              Arel.sql(summary_state), Arel.sql(summary_text), Arel.sql(summary_reason))
   end
+
+  # Requeues a finished video so its work runs again. A failed or no-captions transcript is deleted, and so is its
+  # summary, which must not outlive it; the next run then fetches and summarises again. A done transcript is kept and
+  # only a finished summary is deleted, so the next run summarises again. Returns :transcript, :summary, or nil when
+  # there was nothing to requeue. The deletes are the state check, so no record is read first.
+  def requeue!
+    transaction do
+      if Transcript.where(video_id: id, outcome: %w[failed no_captions]).delete_all.positive?
+        Summary.where(video_id: id).delete_all
+        next :transcript
+      end
+
+      if Transcript.exists?(video_id: id, outcome: "done") &&
+         Summary.where(video_id: id).where.not(outcome: nil).delete_all.positive?
+        next :summary
+      end
+
+      nil
+    end
+  end
 end

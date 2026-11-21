@@ -23,6 +23,24 @@ module Api
           render json: { videos: videos }
         end
 
+        # POST /api/v1/youtube_connection/videos/:youtube_id/requeue. Requeues the caller's finished video so its work
+        # runs again: 202 when something was requeued, 200 with no body when the video is still waiting or working and
+        # there was nothing to requeue. A malformed id is a 404, as is another user's or an unknown video.
+        def requeue
+          raise ActiveRecord::RecordNotFound unless YouTube::DataClient::VIDEO_ID.match?(params[:youtube_id].to_s)
+
+          video = current_user.videos.find_by!(youtube_id: params[:youtube_id])
+          kind = video.requeue!
+          # Queued after requeue! returns, outside its transaction, so the job never runs before the reset is committed.
+          case kind
+          when :transcript
+            YouTubePlaylistCheckJob.perform_later
+          when :summary
+            YouTubeSummariseJob.perform_later
+          end
+          head(kind ? :accepted : :ok)
+        end
+
         private
 
         def summary_json(state, text, reason)

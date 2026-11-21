@@ -33,9 +33,14 @@ Rails.application.routes.draw do
         resource :callback, only: :show, module: :youtube_connections
         # YouTubeConnections::PlaylistsController#index. The caller's own playlists only.
         resources :playlists, only: :index, module: :youtube_connections
-        # YouTubeConnections::VideosController#index. The caller's own recorded videos and their transcript states; no
-        # ids in the path, and Google is never called.
-        resources :videos, only: :index, module: :youtube_connections
+        # YouTubeConnections::VideosController#index and #requeue. #index lists the caller's own recorded videos and
+        # their transcript states; Google is never called. #requeue is POST .../videos/:youtube_id/requeue, for the
+        # caller's own video only. format: false keeps a dot in a YouTube id from being read as a format, and the
+        # constraint lets the id segment hold dots at all, so the whole segment is the id the controller checks.
+        resources :videos, only: :index, module: :youtube_connections, param: :youtube_id,
+                  constraints: { youtube_id: %r{[^/]+} } do
+          post :requeue, on: :member, format: false
+        end
         # YouTubeConnections::PlaylistController#update. Singular: the caller's chosen playlist.
         resource :playlist, only: :update, controller: "youtube_connections/playlist" do
           # YouTubeConnections::PlaylistItemsController. Items of the chosen playlist only. format: false keeps a dot

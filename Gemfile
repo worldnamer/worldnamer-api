@@ -60,10 +60,10 @@ end
 # Traces to Honeycomb over OpenTelemetry (see config/initializers/opentelemetry.rb)
 gem "opentelemetry-sdk", "~> 1.13"
 gem "opentelemetry-exporter-otlp", "~> 0.37.0"
-gem "opentelemetry-instrumentation-all", "~> 0.101.0"
+gem "opentelemetry-instrumentation-all", "~> 0.102.0"
 
 # Exception reporting to Sentry (see config/initializers/sentry.rb)
-gem "sentry-ruby", "~> 7.2"
+gem "sentry-ruby", "~> 7.3"
 gem "sentry-rails", "~> 7.1"
 
 # Login: Devise for bcrypt and Warden, devise-jwt for the access token (bcrypt and jwt arrive with them)
